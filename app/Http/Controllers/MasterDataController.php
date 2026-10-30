@@ -92,6 +92,38 @@ class MasterDataController extends Controller
     }
 
     /**
+     * Update classroom
+     */
+    public function updateClassroom(Request $request, Classroom $classroom): RedirectResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:50',
+            'academic_year' => 'required|string|max:20',
+            'homeroom_teacher_id' => 'nullable|exists:users,id',
+        ]);
+
+        $classroom->update($validated);
+
+        return back()->with('success', "Data kelas {$classroom->name} berhasil diperbarui.");
+    }
+
+    /**
+     * Delete classroom
+     */
+    public function destroyClassroom(Classroom $classroom): RedirectResponse
+    {
+        if ($classroom->students()->exists()) {
+            $studentCount = $classroom->students()->count();
+            return back()->with('error', "Kelas {$classroom->name} tidak dapat dihapus karena masih memiliki {$studentCount} siswa terdaftar. Pindahkan atau hapus data siswa terlebih dahulu.");
+        }
+
+        $name = $classroom->name;
+        $classroom->delete();
+
+        return back()->with('success', "Kelas {$name} berhasil dihapus.");
+    }
+
+    /**
      * Create student (Single)
      */
     public function storeStudent(Request $request): RedirectResponse
@@ -303,5 +335,35 @@ class MasterDataController extends Controller
         );
 
         return back()->with('success', 'Jadwal piket guru berhasil disimpan.');
+    }
+
+    /**
+     * Update duty schedule
+     */
+    public function updateDutySchedule(Request $request, DutySchedule $dutySchedule): RedirectResponse
+    {
+        $validated = $request->validate([
+            'teacher_id' => 'required|exists:users,id',
+            'day_of_week' => 'required|integer|between:1,6',
+            'is_active' => 'nullable|boolean',
+        ]);
+
+        $dutySchedule->update([
+            'teacher_id' => $validated['teacher_id'],
+            'day_of_week' => $validated['day_of_week'],
+            'is_active' => $request->has('is_active') ? $validated['is_active'] : true,
+        ]);
+
+        return back()->with('success', 'Jadwal piket guru berhasil diperbarui.');
+    }
+
+    /**
+     * Delete duty schedule
+     */
+    public function destroyDutySchedule(DutySchedule $dutySchedule): RedirectResponse
+    {
+        $dutySchedule->delete();
+
+        return back()->with('success', 'Jadwal piket guru berhasil dihapus.');
     }
 }

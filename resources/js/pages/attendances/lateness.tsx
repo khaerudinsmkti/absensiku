@@ -158,25 +158,36 @@ export default function LatenessPage({
                                     <Search className="absolute left-3 top-2.5 size-4 text-gray-400" />
                                     <input
                                         type="text"
-                                        placeholder="Ketik NISN atau nama siswa..."
+                                        placeholder={students.length === 0 ? "Tidak ada siswa tersedia" : "Ketik NISN atau nama siswa..."}
                                         value={searchTerm}
                                         onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] pl-9 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none"
+                                        disabled={students.length === 0}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] pl-9 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                     />
                                 </div>
                                 <select
                                     value={data.student_id}
                                     onChange={(e) => setData('student_id', e.target.value)}
-                                    className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-xs font-medium text-gray-800 focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
+                                    disabled={students.length === 0}
+                                    className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-xs font-medium text-gray-800 focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                     required
                                 >
-                                    <option value="">-- Pilih Siswa Terlambat --</option>
+                                    <option value="">
+                                        {students.length === 0
+                                            ? '-- Tidak ada siswa di kelas yang diampu --'
+                                            : '-- Pilih Siswa Terlambat --'}
+                                    </option>
                                     {filteredStudents.map((s) => (
                                         <option key={s.id} value={s.id}>
                                             {s.name} ({s.classroom} - {s.nisn})
                                         </option>
                                     ))}
                                 </select>
+                                {students.length === 0 && (
+                                    <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                                        Catatan: Hanya menampilkan siswa dari kelas yang Anda ampu. Belum ada siswa atau Anda belum ditugaskan sebagai wali kelas aktif.
+                                    </p>
+                                )}
                                 {errors.student_id && (
                                     <p className="text-red-500 text-[11px] mt-1">{errors.student_id}</p>
                                 )}

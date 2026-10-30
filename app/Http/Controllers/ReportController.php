@@ -15,8 +15,21 @@ class ReportController extends Controller
 {
     public function index(Request $request): Response
     {
-        $classrooms = Classroom::orderBy('name')->get();
-        $selectedClassroomId = $request->input('classroom_id', $classrooms->first()?->id);
+        $user = $request->user();
+        $classroomsQuery = Classroom::orderBy('name');
+        if ($user->role === 'teacher') {
+            $classroomsQuery->where('homeroom_teacher_id', $user->id);
+        }
+        $classrooms = $classroomsQuery->get();
+
+        $selectedClassroomId = $request->input('classroom_id');
+        if ($user->role === 'teacher') {
+            if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
+                $selectedClassroomId = $classrooms->first()?->id;
+            }
+        } elseif (! $selectedClassroomId) {
+            $selectedClassroomId = $classrooms->first()?->id;
+        }
         
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());
         $endDate = $request->input('end_date', Carbon::today()->toDateString());
@@ -83,8 +96,20 @@ class ReportController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
+        $user = $request->user();
         $selectedClassroomId = $request->input('classroom_id');
-        $classroom = Classroom::find($selectedClassroomId);
+
+        if ($user->role === 'teacher') {
+            $taughtClassrooms = Classroom::where('homeroom_teacher_id', $user->id)->pluck('id');
+            if ($selectedClassroomId && ! $taughtClassrooms->contains((int) $selectedClassroomId)) {
+                abort(403, 'Akses ekspor dibatasi hanya untuk kelas yang Anda ajar.');
+            }
+            if (! $selectedClassroomId) {
+                $selectedClassroomId = $taughtClassrooms->first();
+            }
+        }
+
+        $classroom = $selectedClassroomId ? Classroom::find($selectedClassroomId) : null;
         $className = $classroom ? str_replace(' ', '_', $classroom->name) : 'Semua_Kelas';
 
         $startDate = $request->input('start_date', Carbon::now()->startOfMonth()->toDateString());

@@ -21,13 +21,21 @@ class LatenessController extends Controller
     {
         $today = Carbon::today()->toDateString();
         $date = $request->input('date', $today);
+        $user = $request->user();
 
         // Fetch late students for the date
-        $lateRecords = Attendance::where('date', $date)
+        $lateRecordsQuery = Attendance::where('date', $date)
             ->where('is_late', true)
             ->with(['student.classroom', 'recordedBy'])
-            ->orderByDesc('late_minutes')
-            ->get()
+            ->orderByDesc('late_minutes');
+
+        if ($user->role === 'teacher') {
+            $lateRecordsQuery->whereHas('student.classroom', function ($q) use ($user) {
+                $q->where('homeroom_teacher_id', $user->id);
+            });
+        }
+
+        $lateRecords = $lateRecordsQuery->get()
             ->map(function ($att) {
                 return [
                     'id' => $att->id,
@@ -43,10 +51,17 @@ class LatenessController extends Controller
             });
 
         // Active students for quick selection
-        $students = Student::where('is_active', true)
+        $studentsQuery = Student::where('is_active', true)
             ->with('classroom')
-            ->orderBy('name')
-            ->get()
+            ->orderBy('name');
+
+        if ($user->role === 'teacher') {
+            $studentsQuery->whereHas('classroom', function ($q) use ($user) {
+                $q->where('homeroom_teacher_id', $user->id);
+            });
+        }
+
+        $students = $studentsQuery->get()
             ->map(function ($s) {
                 return [
                     'id' => $s->id,
@@ -75,12 +90,26 @@ class LatenessController extends Controller
             'sanction' => 'nullable|string|max:255',
         ]);
 
+        if ($request->user()->role === 'teacher') {
+            $isAuthorizedStudent = Student::where('id', $validated['student_id'])
+                ->whereHas('classroom', function ($q) use ($request) {
+                    $q->where('homeroom_teacher_id', $request->user()->id);
+                })
+                ->exists();
+
+            if (! $isAuthorizedStudent) {
+                return back()->withErrors([
+                    'student_id' => 'Anda hanya dapat mencatat keterlambatan untuk siswa di kelas yang Anda ampu.',
+                ]);
+            }
+        }
+
         $checkInCarbon = Carbon::createFromFormat('H:i', substr($validated['check_in_time'], 0, 5));
         $cutoffCarbon = Carbon::createFromFormat('H:i', '07:00');
 
         $lateMinutes = 0;
         if ($checkInCarbon->greaterThan($cutoffCarbon)) {
-            $lateMinutes = $checkInCarbon->diffInMinutes($cutoffCarbon);
+            $lateMinutes = (int) abs($checkInCarbon->diffInMinutes($cutoffCarbon));
         }
 
         $note = 'Alasan: ' . $validated['reason'];

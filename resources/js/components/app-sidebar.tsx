@@ -22,7 +22,9 @@ import {
 import type { NavItem } from '@/types';
 
 export function AppSidebar() {
-    const { url } = usePage();
+    const { url, props } = usePage();
+    const user = props.auth?.user as { role?: string } | undefined;
+    const isAdmin = user?.role === 'admin';
 
     const mainNavItems: NavItem[] = [
         {
@@ -55,12 +57,16 @@ export function AppSidebar() {
             icon: FileSpreadsheet,
             isActive: url.startsWith('/reports'),
         },
-        {
-            title: 'Data Siswa & Kelas',
-            href: '/master',
-            icon: GraduationCap,
-            isActive: url.startsWith('/master'),
-        },
+        ...(isAdmin
+            ? [
+                  {
+                      title: 'Data Siswa & Kelas',
+                      href: '/master',
+                      icon: GraduationCap,
+                      isActive: url.startsWith('/master'),
+                  },
+              ]
+            : []),
     ];
 
     return (

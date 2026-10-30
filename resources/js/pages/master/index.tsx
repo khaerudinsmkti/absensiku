@@ -118,6 +118,9 @@ export default function MasterIndexPage({
     const [showTeacherModal, setShowTeacherModal] = useState(false);
     const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
 
+    const [editingClass, setEditingClass] = useState<ClassroomItem | null>(null);
+    const [editingDuty, setEditingDuty] = useState<DutyScheduleItem | null>(null);
+
     // Student Single Form
     const studentForm = useForm({
         classroom_id: classrooms[0]?.id || '',
@@ -421,18 +424,89 @@ export default function MasterIndexPage({
     };
 
     // Classroom & Duty Handlers
-    const handleCreateClass = (e: React.FormEvent) => {
-        e.preventDefault();
-        classForm.post('/master/classrooms', {
-            onSuccess: () => classForm.reset('name'),
+    const openEditClass = (c: ClassroomItem) => {
+        setEditingClass(c);
+        classForm.setData({
+            name: c.name,
+            academic_year: c.academic_year,
+            homeroom_teacher_id: c.homeroom_teacher ? String(c.homeroom_teacher.id) : '',
         });
     };
 
-    const handleCreateDuty = (e: React.FormEvent) => {
+    const cancelEditClass = () => {
+        setEditingClass(null);
+        classForm.reset();
+    };
+
+    const handleSaveClass = (e: React.FormEvent) => {
         e.preventDefault();
-        dutyForm.post('/master/duty-schedules', {
-            onSuccess: () => dutyForm.reset('teacher_id'),
+        if (editingClass) {
+            classForm.put(`/master/classrooms/${editingClass.id}`, {
+                onSuccess: () => cancelEditClass(),
+            });
+        } else {
+            classForm.post('/master/classrooms', {
+                onSuccess: () => classForm.reset('name'),
+            });
+        }
+    };
+
+    const handleDeleteClass = (c: ClassroomItem) => {
+        const studentCount = c.students?.length ?? 0;
+        if (studentCount > 0) {
+            alert(`Kelas ${c.name} tidak dapat dihapus karena masih memiliki ${studentCount} siswa terdaftar. Pindahkan atau hapus data siswa terlebih dahulu.`);
+            return;
+        }
+
+        if (confirm(`Apakah Anda yakin ingin menghapus kelas ${c.name}?`)) {
+            router.delete(`/master/classrooms/${c.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    if (editingClass?.id === c.id) {
+                        cancelEditClass();
+                    }
+                },
+            });
+        }
+    };
+
+    const openEditDuty = (ds: DutyScheduleItem) => {
+        setEditingDuty(ds);
+        dutyForm.setData({
+            teacher_id: String(ds.teacher_id),
+            day_of_week: String(ds.day_of_week),
         });
+    };
+
+    const cancelEditDuty = () => {
+        setEditingDuty(null);
+        dutyForm.reset();
+    };
+
+    const handleSaveDuty = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (editingDuty) {
+            dutyForm.put(`/master/duty-schedules/${editingDuty.id}`, {
+                onSuccess: () => cancelEditDuty(),
+            });
+        } else {
+            dutyForm.post('/master/duty-schedules', {
+                onSuccess: () => dutyForm.reset('teacher_id'),
+            });
+        }
+    };
+
+    const handleDeleteDuty = (ds: DutyScheduleItem) => {
+        if (confirm(`Apakah Anda yakin ingin menghapus jadwal piket hari ${ds.day_name} untuk ${ds.teacher_name}?`)) {
+            router.delete(`/master/duty-schedules/${ds.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    if (editingDuty?.id === ds.id) {
+                        cancelEditDuty();
+                    }
+                },
+            });
+        }
     };
 
     return (
@@ -797,12 +871,32 @@ export default function MasterIndexPage({
                 {/* ========================================================= */}
                 {activeTab === 'classrooms' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-                            <h3 className="text-base font-bold text-[#111827] flex items-center gap-2 mb-4">
-                                <PlusCircle className="size-5 text-[#FF6B35]" />
-                                Tambah Rombel Baru
-                            </h3>
-                            <form onSubmit={handleCreateClass} className="flex flex-col gap-3.5">
+                        <div className="lg:col-span-1 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-base font-bold text-[#111827] dark:text-white flex items-center gap-2">
+                                    {editingClass ? (
+                                        <>
+                                            <Edit3 className="size-5 text-[#FF6B35]" />
+                                            Edit Rombel / Kelas
+                                        </>
+                                    ) : (
+                                        <>
+                                            <PlusCircle className="size-5 text-[#FF6B35]" />
+                                            Tambah Rombel Baru
+                                        </>
+                                    )}
+                                </h3>
+                                {editingClass && (
+                                    <button
+                                        type="button"
+                                        onClick={cancelEditClass}
+                                        className="text-xs text-gray-500 hover:text-gray-800 font-semibold"
+                                    >
+                                        Batal
+                                    </button>
+                                )}
+                            </div>
+                            <form onSubmit={handleSaveClass} className="flex flex-col gap-3.5">
                                 <div>
                                     <label className="text-xs font-bold text-[#6B7280] uppercase tracking-wider block mb-1">
                                         Nama Rombel / Kelas:
@@ -812,7 +906,7 @@ export default function MasterIndexPage({
                                         placeholder="Contoh: Kelas 5-B"
                                         value={classForm.data.name}
                                         onChange={(e) => classForm.setData('name', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs"
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs focus:border-[#FF6B35] outline-none"
                                         required
                                     />
                                     {classForm.errors.name && (
@@ -828,7 +922,7 @@ export default function MasterIndexPage({
                                         placeholder="2026/2027"
                                         value={classForm.data.academic_year}
                                         onChange={(e) => classForm.setData('academic_year', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-medium"
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-medium focus:border-[#FF6B35] outline-none"
                                         required
                                     />
                                 </div>
@@ -839,7 +933,7 @@ export default function MasterIndexPage({
                                     <select
                                         value={classForm.data.homeroom_teacher_id}
                                         onChange={(e) => classForm.setData('homeroom_teacher_id', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold"
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold focus:border-[#FF6B35] outline-none"
                                     >
                                         <option value="">-- Pilih Guru --</option>
                                         {teachers.map((t) => (
@@ -848,35 +942,53 @@ export default function MasterIndexPage({
                                     </select>
                                 </div>
 
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    disabled={classForm.processing}
-                                    className="w-full mt-2 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand"
-                                >
-                                    {classForm.processing ? 'Menyimpan...' : 'Simpan Kelas'}
-                                </Button>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        disabled={classForm.processing}
+                                        className="flex-1 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
+                                    >
+                                        {classForm.processing
+                                            ? 'Menyimpan...'
+                                            : editingClass
+                                            ? 'Perbarui Kelas'
+                                            : 'Simpan Kelas'}
+                                    </Button>
+                                    {editingClass && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={cancelEditClass}
+                                            className="font-semibold text-xs border border-gray-200"
+                                        >
+                                            Batal
+                                        </Button>
+                                    )}
+                                </div>
                             </form>
                         </div>
 
-                        <div className="lg:col-span-2 overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-                            <div className="border-b border-[#E8E8E8] px-6 py-4">
-                                <h3 className="text-base font-bold text-[#111827]">Daftar Rombel / Kelas Aktif</h3>
+                        <div className="lg:col-span-2 overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                            <div className="border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A]">
+                                <h3 className="text-base font-bold text-[#111827] dark:text-white">Daftar Rombel / Kelas Aktif</h3>
+                                <p className="text-xs text-gray-500">Kelola rombel kelas beserta penetapan wali kelas yang bertanggung jawab.</p>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse text-left text-sm">
                                     <thead>
-                                        <tr className="bg-table-header border-b-2 border-[#FFD4C2]">
+                                        <tr className="bg-table-header border-b-2 border-[#FFD4C2] dark:border-[#3D2520]">
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">No</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Nama Kelas</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Tahun Akademik</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Wali Kelas</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Jumlah Siswa</th>
+                                            <th className="px-5 py-3 text-center text-xs font-bold uppercase text-[#FF6B35]">Aksi</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
+                                    <tbody className="divide-y divide-gray-100 dark:divide-white/10">
                                         {classrooms.map((c, idx) => (
-                                            <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                                            <tr key={c.id} className="hover:bg-gray-50/70 dark:hover:bg-white/5 transition-colors">
                                                 <td className="px-5 py-3.5 text-xs font-bold text-gray-500">{idx + 1}</td>
                                                 <td className="px-5 py-3.5 font-bold text-gray-900 text-xs">{c.name}</td>
                                                 <td className="px-5 py-3.5 text-xs font-semibold text-gray-600">{c.academic_year}</td>
@@ -885,6 +997,26 @@ export default function MasterIndexPage({
                                                 </td>
                                                 <td className="px-5 py-3.5 text-xs font-bold text-teal-700">
                                                     {c.students?.length ?? 0} Siswa
+                                                </td>
+                                                <td className="px-5 py-3.5 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditClass(c)}
+                                                            className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
+                                                            title="Edit Rombel"
+                                                        >
+                                                            <Edit3 className="size-4" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleDeleteClass(c)}
+                                                            className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 transition-colors"
+                                                            title="Hapus Rombel"
+                                                        >
+                                                            <Trash2 className="size-4" />
+                                                        </button>
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -900,12 +1032,32 @@ export default function MasterIndexPage({
                 {/* ========================================================= */}
                 {activeTab === 'duty' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-                            <h3 className="text-base font-bold text-[#111827] flex items-center gap-2 mb-4">
-                                <PlusCircle className="size-5 text-[#FF6B35]" />
-                                Tetapkan Guru Piket
-                            </h3>
-                            <form onSubmit={handleCreateDuty} className="flex flex-col gap-3.5">
+                        <div className="lg:col-span-1 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-base font-bold text-[#111827] dark:text-white flex items-center gap-2">
+                                    {editingDuty ? (
+                                        <>
+                                            <Edit3 className="size-5 text-[#FF6B35]" />
+                                            Edit Jadwal Piket
+                                        </>
+                                    ) : (
+                                        <>
+                                            <PlusCircle className="size-5 text-[#FF6B35]" />
+                                            Tetapkan Guru Piket
+                                        </>
+                                    )}
+                                </h3>
+                                {editingDuty && (
+                                    <button
+                                        type="button"
+                                        onClick={cancelEditDuty}
+                                        className="text-xs text-gray-500 hover:text-gray-800 font-semibold"
+                                    >
+                                        Batal
+                                    </button>
+                                )}
+                            </div>
+                            <form onSubmit={handleSaveDuty} className="flex flex-col gap-3.5">
                                 <div>
                                     <label className="text-xs font-bold text-[#6B7280] uppercase tracking-wider block mb-1">
                                         Pilih Guru:
@@ -913,7 +1065,7 @@ export default function MasterIndexPage({
                                     <select
                                         value={dutyForm.data.teacher_id}
                                         onChange={(e) => dutyForm.setData('teacher_id', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold"
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold focus:border-[#FF6B35] outline-none"
                                         required
                                     >
                                         <option value="">-- Pilih Guru --</option>
@@ -929,7 +1081,7 @@ export default function MasterIndexPage({
                                     <select
                                         value={dutyForm.data.day_of_week}
                                         onChange={(e) => dutyForm.setData('day_of_week', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold"
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-semibold focus:border-[#FF6B35] outline-none"
                                     >
                                         <option value="1">Senin</option>
                                         <option value="2">Selasa</option>
@@ -940,46 +1092,92 @@ export default function MasterIndexPage({
                                     </select>
                                 </div>
 
-                                <Button
-                                    type="submit"
-                                    variant="primary"
-                                    disabled={dutyForm.processing}
-                                    className="w-full mt-2 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand"
-                                >
-                                    {dutyForm.processing ? 'Menyimpan...' : 'Simpan Jadwal Piket'}
-                                </Button>
+                                <div className="flex items-center gap-2 mt-2">
+                                    <Button
+                                        type="submit"
+                                        variant="primary"
+                                        disabled={dutyForm.processing}
+                                        className="flex-1 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
+                                    >
+                                        {dutyForm.processing
+                                            ? 'Menyimpan...'
+                                            : editingDuty
+                                            ? 'Perbarui Jadwal Piket'
+                                            : 'Simpan Jadwal Piket'}
+                                    </Button>
+                                    {editingDuty && (
+                                        <Button
+                                            type="button"
+                                            variant="ghost"
+                                            onClick={cancelEditDuty}
+                                            className="font-semibold text-xs border border-gray-200"
+                                        >
+                                            Batal
+                                        </Button>
+                                    )}
+                                </div>
                             </form>
                         </div>
 
-                        <div className="lg:col-span-2 overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
-                            <div className="border-b border-[#E8E8E8] px-6 py-4">
-                                <h3 className="text-base font-bold text-[#111827]">Jadwal Tugas Guru Piket Mingguan</h3>
+                        <div className="lg:col-span-2 overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                            <div className="border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A]">
+                                <h3 className="text-base font-bold text-[#111827] dark:text-white">Jadwal Tugas Guru Piket Mingguan</h3>
+                                <p className="text-xs text-gray-500">Guru yang bertugas pada hari aktif berwenang mengelola keterlambatan & izin pulang awal.</p>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse text-left text-sm">
                                     <thead>
-                                        <tr className="bg-table-header border-b-2 border-[#FFD4C2]">
+                                        <tr className="bg-table-header border-b-2 border-[#FFD4C2] dark:border-[#3D2520]">
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Hari</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Nama Guru Piket</th>
                                             <th className="px-5 py-3 text-xs font-bold uppercase text-[#FF6B35]">Status Otoritas</th>
+                                            <th className="px-5 py-3 text-center text-xs font-bold uppercase text-[#FF6B35]">Aksi</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-gray-100">
-                                        {dutySchedules.map((ds) => (
-                                            <tr key={ds.id} className="hover:bg-gray-50 transition-colors">
-                                                <td className="px-5 py-3.5 font-bold text-gray-900 text-xs">
-                                                    <span className="rounded-md bg-purple-50 text-purple-700 px-2.5 py-1">
-                                                        {ds.day_name}
-                                                    </span>
-                                                </td>
-                                                <td className="px-5 py-3.5 font-bold text-gray-800 text-xs">{ds.teacher_name}</td>
-                                                <td className="px-5 py-3.5 text-xs">
-                                                    <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-[10px] font-bold">
-                                                        Akses Piket Aktif
-                                                    </span>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-white/10">
+                                        {dutySchedules.length === 0 ? (
+                                            <tr>
+                                                <td colSpan={4} className="text-center py-10 text-gray-500 text-xs font-medium">
+                                                    Belum ada jadwal piket yang ditetapkan.
                                                 </td>
                                             </tr>
-                                        ))}
+                                        ) : (
+                                            dutySchedules.map((ds) => (
+                                                <tr key={ds.id} className="hover:bg-gray-50/70 dark:hover:bg-white/5 transition-colors">
+                                                    <td className="px-5 py-3.5 font-bold text-gray-900 text-xs">
+                                                        <span className="rounded-md bg-purple-50 text-purple-700 px-2.5 py-1">
+                                                            {ds.day_name}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 font-bold text-gray-800 text-xs">{ds.teacher_name}</td>
+                                                    <td className="px-5 py-3.5 text-xs">
+                                                        <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-[10px] font-bold">
+                                                            Akses Piket Aktif
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-3.5 text-center">
+                                                        <div className="flex items-center justify-center gap-1.5">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditDuty(ds)}
+                                                                className="rounded-lg p-1.5 text-blue-600 hover:bg-blue-50 transition-colors"
+                                                                title="Edit Jadwal Piket"
+                                                            >
+                                                                <Edit3 className="size-4" />
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleDeleteDuty(ds)}
+                                                                className="rounded-lg p-1.5 text-red-600 hover:bg-red-50 transition-colors"
+                                                                title="Hapus Jadwal Piket"
+                                                            >
+                                                                <Trash2 className="size-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))
+                                        )}
                                     </tbody>
                                 </table>
                             </div>

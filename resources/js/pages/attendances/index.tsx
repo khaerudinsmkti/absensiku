@@ -159,6 +159,9 @@ export default function AttendanceIndex({
                                     onChange={(e) => handleClassChange(e.target.value)}
                                     className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white cursor-pointer"
                                 >
+                                    {classrooms.length === 0 && (
+                                        <option value="">Belum ada kelas yang diampu</option>
+                                    )}
                                     {classrooms.map((cls) => (
                                         <option key={cls.id} value={cls.id}>
                                             {cls.name} ({cls.academic_year})

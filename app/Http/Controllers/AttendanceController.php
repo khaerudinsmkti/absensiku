@@ -24,12 +24,17 @@ class AttendanceController extends Controller
         $user = $request->user();
 
         $classroomsQuery = Classroom::with('homeroomTeacher')->orderBy('name');
-        
-        // If teacher is homeroom and not admin, prioritize their classroom
+        if ($user->role === 'teacher') {
+            $classroomsQuery->where('homeroom_teacher_id', $user->id);
+        }
         $classrooms = $classroomsQuery->get();
 
         $selectedClassroomId = $request->input('classroom_id');
-        if (! $selectedClassroomId) {
+        if ($user->role === 'teacher') {
+            if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
+                $selectedClassroomId = $classrooms->first()?->id;
+            }
+        } elseif (! $selectedClassroomId) {
             $userClass = $classrooms->firstWhere('homeroom_teacher_id', $user->id);
             $selectedClassroomId = $userClass ? $userClass->id : $classrooms->first()?->id;
         }
@@ -93,6 +98,15 @@ class AttendanceController extends Controller
             'attendances.*.notes' => 'nullable|string|max:255',
         ]);
 
+        if ($request->user()->role === 'teacher') {
+            $ownsClass = Classroom::where('id', $validated['classroom_id'])
+                ->where('homeroom_teacher_id', $request->user()->id)
+                ->exists();
+            if (! $ownsClass) {
+                abort(403, 'Anda hanya dapat mengelola presensi untuk kelas yang Anda ajar.');
+            }
+        }
+
         DB::transaction(function () use ($validated, $request) {
             foreach ($validated['attendances'] as $item) {
                 $status = $item['status'];
@@ -125,6 +139,12 @@ class AttendanceController extends Controller
             'date' => 'required|date',
             'status' => 'required|in:present,sick,permit,absent',
         ]);
+
+        if ($request->user()->role === 'teacher') {
+            if ($student->classroom->homeroom_teacher_id !== $request->user()->id) {
+                abort(403, 'Anda hanya dapat memperbarui presensi siswa di kelas yang Anda ajar.');
+            }
+        }
 
         Attendance::updateOrCreate(
             [

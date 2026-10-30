@@ -17,10 +17,21 @@ class DashboardController extends Controller
     {
         $today = Carbon::today()->toDateString();
         $date = $request->input('date', $today);
-        $classrooms = Classroom::with('homeroomTeacher')->orderBy('name')->get();
+        $user = $request->user();
+
+        // If teacher, only load the classroom(s) they teach
+        $classroomsQuery = Classroom::with('homeroomTeacher')->orderBy('name');
+        if ($user->role === 'teacher') {
+            $classroomsQuery->where('homeroom_teacher_id', $user->id);
+        }
+        $classrooms = $classroomsQuery->get();
 
         $selectedClassroomId = $request->input('classroom_id');
-        if (! $selectedClassroomId && $classrooms->isNotEmpty()) {
+        if ($user->role === 'teacher') {
+            if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
+                $selectedClassroomId = $classrooms->first()?->id;
+            }
+        } elseif (! $selectedClassroomId && $classrooms->isNotEmpty()) {
             $selectedClassroomId = $classrooms->first()->id;
         }
 
