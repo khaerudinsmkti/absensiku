@@ -31,11 +31,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
 
-    // 6. Master Data (Kelas, Siswa, Jadwal Piket)
+    // 6. Master Data (Kelas, Siswa, Guru, Jadwal Piket)
     Route::get('/master', [MasterDataController::class, 'index'])->name('master.index');
     Route::post('/master/classrooms', [MasterDataController::class, 'storeClassroom'])->name('master.classrooms.store');
-    Route::post('/master/students', [MasterDataController::class, 'storeStudent'])->name('master.students.store');
     Route::post('/master/duty-schedules', [MasterDataController::class, 'storeDutySchedule'])->name('master.duty-schedules.store');
+
+    // Siswa CRUD & Batch Import
+    Route::post('/master/students', [MasterDataController::class, 'storeStudent'])->name('master.students.store');
+    Route::put('/master/students/{student}', [MasterDataController::class, 'updateStudent'])->name('master.students.update');
+    Route::delete('/master/students/{student}', [MasterDataController::class, 'destroyStudent'])->name('master.students.destroy');
+    Route::post('/master/students/batch-import', [MasterDataController::class, 'batchImportStudents'])->name('master.students.batch-import');
+
+    // Guru CRUD
+    Route::post('/master/teachers', [MasterDataController::class, 'storeTeacher'])->name('master.teachers.store');
+    Route::put('/master/teachers/{user}', [MasterDataController::class, 'updateTeacher'])->name('master.teachers.update');
+    Route::delete('/master/teachers/{user}', [MasterDataController::class, 'destroyTeacher'])->name('master.teachers.destroy');
 });
 
 require __DIR__.'/settings.php';
