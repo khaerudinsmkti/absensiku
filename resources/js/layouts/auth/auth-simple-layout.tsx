@@ -9,28 +9,43 @@ export default function AuthSimpleLayout({
     description,
 }: AuthLayoutProps) {
     return (
-        <div className="flex min-h-svh flex-col items-center justify-center gap-6 bg-background p-6 md:p-10">
-            <div className="w-full max-w-sm">
-                <div className="flex flex-col gap-8">
-                    <div className="flex flex-col items-center gap-4">
+        <div className="relative flex min-h-svh flex-col items-center justify-center p-6 md:p-10 bg-page-gradient overflow-hidden">
+            {/* Ambient Background Glows */}
+            <div className="pointer-events-none absolute -top-24 -left-24 size-96 rounded-full bg-[#FF6B35]/15 blur-3xl" />
+            <div className="pointer-events-none absolute -bottom-24 -right-24 size-96 rounded-full bg-[#4ECDC4]/20 blur-3xl" />
+
+            <div className="relative z-10 w-full max-w-[440px]">
+                <div className="rounded-[22px] border-2 border-[#E8E8E8] bg-white/95 p-8 shadow-[0_24px_70px_rgba(255,107,53,0.14)] backdrop-blur-md sm:p-10 dark:border-[#2D234A] dark:bg-[#18122B]/95">
+                    <div className="mb-8 flex flex-col items-center text-center">
                         <Link
                             href={home()}
-                            className="flex flex-col items-center gap-2 font-medium"
+                            className="group mb-5 flex items-center gap-3 transition-transform duration-200 hover:scale-105"
                         >
-                            <div className="mb-1 flex h-9 w-9 items-center justify-center rounded-md">
-                                <AppLogoIcon className="size-9 fill-current text-[var(--foreground)] dark:text-white" />
+                            <div className="flex size-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#FF6B35] to-[#FFE66D] text-white shadow-lg shadow-[#FF6B35]/30">
+                                <AppLogoIcon className="size-8 text-white" />
                             </div>
-                            <span className="sr-only">{title}</span>
                         </Link>
+                        
+                        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF0EB] px-3 py-1 text-xs font-bold text-[#FF6B35] mb-3 dark:bg-[#331C1A] dark:text-[#FF8C5A]">
+                            <span className="size-1.5 rounded-full bg-[#FF6B35]" />
+                            AbsensiKu SD
+                        </div>
 
-                        <div className="space-y-2 text-center">
-                            <h1 className="text-xl font-medium">{title}</h1>
-                            <p className="text-center text-sm text-muted-foreground">
+                        <h1 className="text-2xl font-extrabold tracking-tight text-[#111827] dark:text-white">
+                            {title}
+                        </h1>
+                        {description && (
+                            <p className="mt-2 text-sm text-[#6B7280] dark:text-[#9CA3AF]">
                                 {description}
                             </p>
-                        </div>
+                        )}
                     </div>
+
                     {children}
+                </div>
+
+                <div className="mt-6 text-center text-xs text-[#9CA3AF] dark:text-neutral-500">
+                    &copy; {new Date().getFullYear()} AbsensiKu SD. Sistem Presensi Digital Terpadu.
                 </div>
             </div>
         </div>

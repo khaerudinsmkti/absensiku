@@ -6,15 +6,18 @@ export default function AppLogo() {
     const { name } = usePage().props;
 
     return (
-        <>
-            <div className="flex aspect-square size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-                <AppLogoIcon className="size-5 fill-current text-white dark:text-black" />
+        <div className="flex items-center gap-3">
+            <div className="flex aspect-square size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#FF6B35] to-[#FFE66D] text-white shadow-md shadow-[#FF6B35]/25">
+                <AppLogoIcon className="size-6 text-white" />
             </div>
-            <div className="ml-1 grid flex-1 text-left text-sm">
-                <span className="mb-0.5 truncate leading-tight font-semibold">
-                    {name}
+            <div className="flex flex-col text-left">
+                <span className="text-base font-extrabold tracking-tight text-white leading-tight">
+                    {name || 'AbsensiKu'}
+                </span>
+                <span className="text-[11px] font-semibold text-[#FFE66D] leading-none tracking-wide">
+                    SD DIGITAL
                 </span>
             </div>
-        </>
+        </div>
     );
 }
