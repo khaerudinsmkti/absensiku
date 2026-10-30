@@ -1,53 +1,85 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import {
     AlertCircle,
-    Calendar,
     CheckCircle2,
     Clock,
     Download,
     FileSpreadsheet,
-    GraduationCap,
-    TrendingUp,
     UserCheck,
     Users,
     XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
 import { AttendanceBadge, type AttendanceStatus } from '@/components/attendance-badge';
 import { AttendanceRadioGroup } from '@/components/attendance-radio-group';
 import { PageBanner } from '@/components/page-banner';
 import { StatCard } from '@/components/stat-card';
 import { Button } from '@/components/ui/button';
-import { dashboard } from '@/routes';
+import type { ClassroomData, StudentAttendanceRow } from '@/types/attendance';
 
-interface SampleStudent {
-    id: number;
-    nisn: string;
-    name: string;
-    gender: 'L' | 'P';
-    kelas: string;
-    status: AttendanceStatus;
-    waktuHadir?: string;
+interface DashboardProps {
+    classrooms: ClassroomData[];
+    selectedClassroomId: number;
+    selectedDate: string;
+    stats: {
+        total_students: number;
+        total_hadir: number;
+        total_sakit: number;
+        total_izin: number;
+        total_alpha: number;
+        total_terlambat: number;
+        total_adjustments: number;
+        attendance_rate: number;
+    };
+    students: StudentAttendanceRow[];
 }
 
-export default function Dashboard() {
-    const [selectedDate, setSelectedDate] = useState('2026-10-30');
-    const [selectedKelas, setSelectedKelas] = useState('Kelas 4-A');
-
-    const [students, setStudents] = useState<SampleStudent[]>([
-        { id: 1, nisn: '0089218201', name: 'Ahmad Faiz Pratama', gender: 'L', kelas: 'Kelas 4-A', status: 'hadir', waktuHadir: '06:48' },
-        { id: 2, nisn: '0089218202', name: 'Anindya Putri Kirana', gender: 'P', kelas: 'Kelas 4-A', status: 'hadir', waktuHadir: '06:55' },
-        { id: 3, nisn: '0089218203', name: 'Bagas Aditya Nugraha', gender: 'L', kelas: 'Kelas 4-A', status: 'terlambat', waktuHadir: '07:18' },
-        { id: 4, nisn: '0089218204', name: 'Citra Amelia Zahra', gender: 'P', kelas: 'Kelas 4-A', status: 'sakit', waktuHadir: '-' },
-        { id: 5, nisn: '0089218205', name: 'Dimas Satria Ramadhan', gender: 'L', kelas: 'Kelas 4-A', status: 'izin', waktuHadir: '-' },
-        { id: 6, nisn: '0089218206', name: 'Eka Lestari Wulandari', gender: 'P', kelas: 'Kelas 4-A', status: 'alpha', waktuHadir: '-' },
-    ]);
-
-    const handleStatusChange = (id: number, newStatus: AttendanceStatus) => {
-        setStudents((prev) =>
-            prev.map((s) => (s.id === id ? { ...s, status: newStatus } : s)),
+export default function Dashboard({
+    classrooms = [],
+    selectedClassroomId,
+    selectedDate,
+    stats,
+    students = [],
+}: DashboardProps) {
+    const handleClassChange = (newClassId: string) => {
+        router.get(
+            '/dashboard',
+            {
+                classroom_id: newClassId,
+                date: selectedDate,
+            },
+            { preserveState: true, preserveScroll: true },
         );
     };
+
+    const handleDateChange = (newDate: string) => {
+        router.get(
+            '/dashboard',
+            {
+                classroom_id: selectedClassroomId,
+                date: newDate,
+            },
+            { preserveState: true, preserveScroll: true },
+        );
+    };
+
+    const handleQuickStatusChange = (studentId: number, status: AttendanceStatus) => {
+        const mappedStatus = status === 'hadir' ? 'present'
+            : status === 'sakit' ? 'sick'
+            : status === 'izin' ? 'permit'
+            : status === 'alpha' ? 'absent'
+            : 'present';
+
+        router.patch(
+            `/attendances/student/${studentId}`,
+            {
+                date: selectedDate,
+                status: mappedStatus,
+            },
+            { preserveScroll: true },
+        );
+    };
+
+    const currentClassroom = classrooms.find((c) => c.id === selectedClassroomId);
 
     return (
         <>
@@ -55,58 +87,60 @@ export default function Dashboard() {
             <div className="flex flex-1 flex-col gap-6 p-6 sm:p-8 bg-page-gradient min-h-screen">
                 {/* 1. Page Banner */}
                 <PageBanner
-                    badgeText="Hari Ini • Semester Ganjil"
-                    title="Halo, Selamat Pagi Guru Hebat! 👋"
-                    description="Pantau kehadiran peserta didik hari ini secara realtime. Rekap otomatis dan laporan presensi siap diunduh kapan pun."
+                    badgeText={`Hari Ini • ${selectedDate}`}
+                    title="Halo, Selamat Datang di AbsensiKu! 👋"
+                    description="Sistem presensi siswa terpadu dengan pencatatan kehadiran realtime, keterlambatan otomatis, dan verifikasi izin pulang awal."
                     action={
                         <div className="flex flex-wrap gap-2.5">
                             <Button
+                                asChild
                                 variant="secondary"
                                 className="bg-white text-[#FF6B35] hover:bg-[#FFFBE6] shadow-sm font-bold border-none"
                             >
-                                <Download className="size-4" />
-                                Export Rekap
+                                <a href={`/reports/export?classroom_id=${selectedClassroomId}&start_date=${selectedDate}&end_date=${selectedDate}`}>
+                                    <Download className="size-4 mr-1.5" />
+                                    Export Rekap CSV
+                                </a>
                             </Button>
                         </div>
                     }
                 />
 
-                {/* 2. Stats Grid (4 Cards Hierarchy) */}
+                {/* 2. Stats Grid */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                     <StatCard
-                        title="Total Hadir"
-                        value="342"
-                        subtitle="95% dari 360 siswa"
+                        title="Tingkat Kehadiran"
+                        value={`${stats.attendance_rate}%`}
+                        subtitle={`${stats.total_hadir} dari ${stats.total_students} siswa hadir`}
                         icon={CheckCircle2}
                         variant="success"
-                        trend={{ label: '+2.1% kemarin', isPositive: true }}
+                        trend={{ label: `${stats.total_hadir} Hadir`, isPositive: true }}
                     />
                     <StatCard
                         title="Sakit & Izin"
-                        value="12"
-                        subtitle="8 Sakit, 4 Izin Resmi"
+                        value={stats.total_sakit + stats.total_izin}
+                        subtitle={`${stats.total_sakit} Sakit, ${stats.total_izin} Izin Resmi`}
                         icon={AlertCircle}
                         variant="warning"
                     />
                     <StatCard
                         title="Keterlambatan"
-                        value="4"
-                        subtitle="Tertib masuk gerbang"
+                        value={stats.total_terlambat}
+                        subtitle="Tercatat guru piket hari ini"
                         icon={Clock}
                         variant="purple"
-                        trend={{ label: '-50% menurun', isPositive: true }}
                     />
                     <StatCard
-                        title="Alpha / Tanpa Ket."
-                        value="2"
-                        subtitle="Perlu konfirmasi wali"
+                        title="Alpha & Tanpa Ket."
+                        value={stats.total_alpha}
+                        subtitle={stats.total_adjustments > 0 ? `${stats.total_adjustments} Pulang Awal` : 'Perlu konfirmasi wali'}
                         icon={XCircle}
                         variant="danger"
-                        trend={{ label: 'Waspada', isPositive: false }}
+                        trend={stats.total_alpha > 0 ? { label: 'Perlu Cek', isPositive: false } : undefined}
                     />
                 </div>
 
-                {/* 3. Filter Bar & Quick Actions Container */}
+                {/* 3. Filter Bar */}
                 <div className="flex flex-col gap-4 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] sm:flex-row sm:items-center sm:justify-between dark:border-[#2D234A] dark:bg-[#18122B]">
                     <div className="flex flex-wrap items-center gap-3">
                         <div className="flex items-center gap-2">
@@ -114,14 +148,15 @@ export default function Dashboard() {
                                 Kelas:
                             </span>
                             <select
-                                value={selectedKelas}
-                                onChange={(e) => setSelectedKelas(e.target.value)}
+                                value={selectedClassroomId || ''}
+                                onChange={(e) => handleClassChange(e.target.value)}
                                 className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-1.5 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white cursor-pointer"
                             >
-                                <option value="Kelas 4-A">Kelas 4-A (Wali: Ibu Nurul)</option>
-                                <option value="Kelas 4-B">Kelas 4-B (Wali: Bpk. Bambang)</option>
-                                <option value="Kelas 5-A">Kelas 5-A</option>
-                                <option value="Kelas 6-A">Kelas 6-A</option>
+                                {classrooms.map((cls) => (
+                                    <option key={cls.id} value={cls.id}>
+                                        {cls.name} {cls.homeroom_teacher ? `(Wali: ${cls.homeroom_teacher.name})` : ''}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
@@ -132,36 +167,41 @@ export default function Dashboard() {
                             <input
                                 type="date"
                                 value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
+                                onChange={(e) => handleDateChange(e.target.value)}
                                 className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-1.5 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white"
                             />
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm" className="font-semibold text-xs">
-                            Set Semua Hadir
-                        </Button>
-                        <Button variant="primary" size="sm" className="font-semibold text-xs">
-                            Simpan Presensi
+                        <Button
+                            asChild
+                            variant="primary"
+                            size="sm"
+                            className="font-semibold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand"
+                        >
+                            <a href={`/attendances?classroom_id=${selectedClassroomId}&date=${selectedDate}`}>
+                                <UserCheck className="size-4 mr-1.5" />
+                                Buka Presensi Massal
+                            </a>
                         </Button>
                     </div>
                 </div>
 
-                {/* 4. Data Table Sesuai Spesifikasi Design System */}
+                {/* 4. Data Table */}
                 <div className="overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
                     <div className="flex items-center justify-between border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A]">
                         <div>
                             <h2 className="text-base font-bold text-[#111827] dark:text-white">
-                                Presensi Siswa: {selectedKelas}
+                                Presensi Siswa: {currentClassroom?.name ?? 'Pilih Kelas'}
                             </h2>
                             <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                                Klik opsi status untuk memperbarui catatan kehadiran dengan cepat.
+                                Klik opsi status untuk memperbarui catatan kehadiran dengan cepat (otomatis tersimpan).
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="rounded-full bg-[#E8FAF9] px-3 py-1 text-xs font-bold text-[#0D9488] dark:bg-[#113835] dark:text-[#5EEAD4]">
-                                28 Siswa Terdaftar
+                                {students.length} Siswa Terdaftar
                             </span>
                         </div>
                     </div>
@@ -174,7 +214,7 @@ export default function Dashboard() {
                                         No
                                     </th>
                                     <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        NISN
+                                        NISN / NIS
                                     </th>
                                     <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
                                         Nama Peserta Didik
@@ -194,49 +234,80 @@ export default function Dashboard() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-[#F5F5F5] dark:divide-[#231A3A]">
-                                {students.map((student, idx) => (
-                                    <tr
-                                        key={student.id}
-                                        className="transition-colors hover:bg-gradient-to-r hover:from-[#FFF8F5] hover:to-[#F0FFFE] dark:hover:from-[#211636] dark:hover:to-[#172433]"
-                                    >
-                                        <td className="px-5 py-3.5 font-bold text-[#6B7280]">
-                                            {idx + 1}
-                                        </td>
-                                        <td className="px-5 py-3.5 font-mono text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                                            {student.nisn}
-                                        </td>
-                                        <td className="px-5 py-3.5 font-bold text-[#1F2937] dark:text-white">
-                                            {student.name}
-                                        </td>
-                                        <td className="px-5 py-3.5">
-                                            <span
-                                                className={`inline-flex size-6 items-center justify-center rounded-md text-xs font-bold ${
-                                                    student.gender === 'L'
-                                                        ? 'bg-[#E8FAF9] text-[#0D9488]'
-                                                        : 'bg-[#EDE9FE] text-[#7C3AED]'
-                                                }`}
-                                            >
-                                                {student.gender}
-                                            </span>
-                                        </td>
-                                        <td className="px-5 py-3.5 text-xs font-medium text-[#6B7280]">
-                                            {student.waktuHadir}
-                                        </td>
-                                        <td className="px-5 py-3.5">
-                                            <AttendanceBadge status={student.status} />
-                                        </td>
-                                        <td className="px-5 py-3.5 text-center">
-                                            <AttendanceRadioGroup
-                                                name={`att-${student.id}`}
-                                                value={student.status}
-                                                compact
-                                                onChange={(val) =>
-                                                    handleStatusChange(student.id, val)
-                                                }
-                                            />
+                                {students.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="text-center py-10 text-gray-500 font-medium">
+                                            Belum ada data siswa untuk kelas ini.
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    students.map((student, idx) => (
+                                        <tr
+                                            key={student.id}
+                                            className="transition-colors hover:bg-gradient-to-r hover:from-[#FFF8F5] hover:to-[#F0FFFE] dark:hover:from-[#211636] dark:hover:to-[#172433]"
+                                        >
+                                            <td className="px-5 py-3.5 font-bold text-[#6B7280]">
+                                                {idx + 1}
+                                            </td>
+                                            <td className="px-5 py-3.5 font-mono text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                                                <div>{student.nisn}</div>
+                                                <div className="text-[11px] text-gray-400">NIS: {student.nis}</div>
+                                            </td>
+                                            <td className="px-5 py-3.5 font-bold text-[#1F2937] dark:text-white">
+                                                <div>{student.name}</div>
+                                                {student.adjustment && (
+                                                    <div className="mt-1 inline-flex items-center gap-1 rounded bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-bold text-[#0F766E]">
+                                                        {student.adjustment.type_name} ({student.adjustment.departure_time})
+                                                    </div>
+                                                )}
+                                                {student.notes && !student.adjustment && (
+                                                    <div className="text-[11px] text-gray-500 font-normal mt-0.5">
+                                                        {student.notes}
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3.5">
+                                                <span
+                                                    className={`inline-flex size-6 items-center justify-center rounded-md text-xs font-bold ${
+                                                        student.gender === 'L'
+                                                            ? 'bg-[#E8FAF9] text-[#0D9488]'
+                                                            : 'bg-[#EDE9FE] text-[#7C3AED]'
+                                                    }`}
+                                                >
+                                                    {student.gender}
+                                                </span>
+                                            </td>
+                                            <td className="px-5 py-3.5 text-xs font-medium text-[#6B7280]">
+                                                {student.is_late ? (
+                                                    <span className="font-bold text-[#7C3AED]">
+                                                        {student.check_in_time} (+{student.late_minutes}m)
+                                                    </span>
+                                                ) : (
+                                                    student.check_in_time || '-'
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3.5">
+                                                <AttendanceBadge
+                                                    status={student.status as AttendanceStatus}
+                                                />
+                                            </td>
+                                            <td className="px-5 py-3.5 text-center">
+                                                <AttendanceRadioGroup
+                                                    name={`att-${student.id}`}
+                                                    value={
+                                                        student.status === 'terlambat' ? 'hadir' :
+                                                        student.status === 'khusus' ? 'hadir' :
+                                                        student.status as AttendanceStatus
+                                                    }
+                                                    compact
+                                                    onChange={(val) =>
+                                                        handleQuickStatusChange(student.id, val)
+                                                    }
+                                                />
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>
@@ -250,7 +321,7 @@ Dashboard.layout = {
     breadcrumbs: [
         {
             title: 'Dashboard',
-            href: dashboard(),
+            href: '/dashboard',
         },
     ],
 };

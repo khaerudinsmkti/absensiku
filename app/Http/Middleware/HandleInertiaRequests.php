@@ -35,11 +35,28 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $isDutyToday = false;
+
+        if ($user) {
+            $dayOfWeek = now()->dayOfWeekIso; // 1 = Senin, ..., 7 = Minggu
+            $isDutyToday = $user->role === 'admin' || \App\Models\DutySchedule::where('teacher_id', $user->id)
+                ->where('day_of_week', $dayOfWeek)
+                ->where('is_active', true)
+                ->exists();
+        }
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user ? array_merge($user->toArray(), [
+                    'is_duty_teacher_today' => $isDutyToday,
+                ]) : null,
+            ],
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error' => fn () => $request->session()->get('error'),
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
