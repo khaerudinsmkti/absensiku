@@ -75,11 +75,30 @@ class AttendanceController extends Controller
                 });
         }
 
+        $today = Carbon::today()->toDateString();
+        $isFutureDate = $date > $today;
+        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
+        if (! $holiday && Carbon::parse($date)->isSunday()) {
+            $holiday = (object) [
+                'name' => 'Hari Minggu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan',
+                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
+            ];
+        }
+
         return Inertia::render('attendances/index', [
             'classrooms' => $classrooms,
             'selectedClassroom' => $selectedClassroom,
             'selectedClassroomId' => (int) $selectedClassroomId,
             'selectedDate' => $date,
+            'isFutureDate' => $isFutureDate,
+            'holiday' => $holiday ? [
+                'name' => $holiday->name,
+                'type' => $holiday->type,
+                'type_name' => $holiday->type_name,
+                'description' => $holiday->description,
+            ] : null,
             'students' => $students,
         ]);
     }
@@ -97,6 +116,17 @@ class AttendanceController extends Controller
             'attendances.*.status' => 'required|in:present,sick,permit,absent',
             'attendances.*.notes' => 'nullable|string|max:255',
         ]);
+
+        $today = Carbon::today()->toDateString();
+        if ($validated['date'] > $today) {
+            return back()->with('error', 'Tidak dapat menginput data presensi untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
+        }
+
+        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
+        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
+            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Presensi tidak dapat diinput.");
+        }
 
         if ($request->user()->role === 'teacher') {
             $ownsClass = Classroom::where('id', $validated['classroom_id'])
@@ -139,6 +169,17 @@ class AttendanceController extends Controller
             'date' => 'required|date',
             'status' => 'required|in:present,sick,permit,absent',
         ]);
+
+        $today = Carbon::today()->toDateString();
+        if ($validated['date'] > $today) {
+            return back()->with('error', 'Tidak dapat memperbarui presensi untuk tanggal di masa mendatang.');
+        }
+
+        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
+        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
+            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Presensi tidak dapat diinput.");
+        }
 
         if ($request->user()->role === 'teacher') {
             if ($student->classroom->homeroom_teacher_id !== $request->user()->id) {

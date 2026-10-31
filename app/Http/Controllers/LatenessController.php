@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attendance;
+use App\Models\SchoolSetting;
 use App\Models\Student;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -37,6 +38,16 @@ class LatenessController extends Controller
 
         $lateRecords = $lateRecordsQuery->get()
             ->map(function ($att) {
+                $rawNotes = $att->notes ?? '';
+                $reason = '';
+                $sanction = '';
+                if (preg_match('/Alasan:\s*(.*?)(?:\s*\|\s*Sanksi\/Tindakan:\s*(.*))?$/s', $rawNotes, $matches)) {
+                    $reason = trim($matches[1] ?? '');
+                    $sanction = trim($matches[2] ?? '');
+                } else {
+                    $reason = $rawNotes;
+                }
+
                 return [
                     'id' => $att->id,
                     'student_id' => $att->student_id,
@@ -46,6 +57,8 @@ class LatenessController extends Controller
                     'check_in_time' => substr($att->check_in_time, 0, 5),
                     'late_minutes' => $att->late_minutes,
                     'notes' => $att->notes,
+                    'reason' => $reason,
+                    'sanction' => $sanction,
                     'recorded_by' => $att->recordedBy->name,
                 ];
             });
@@ -71,12 +84,33 @@ class LatenessController extends Controller
                 ];
             });
 
+        $schoolSetting = SchoolSetting::getSetting();
+        $cutoffTime = substr($schoolSetting->start_time ?: '07:00', 0, 5);
+
+        $isFutureDate = $date > $today;
+        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
+        if (! $holiday && Carbon::parse($date)->isSunday()) {
+            $holiday = (object) [
+                'name' => 'Hari Minggu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan',
+                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
+            ];
+        }
+
         return Inertia::render('attendances/lateness', [
             'selectedDate' => $date,
+            'isFutureDate' => $isFutureDate,
+            'holiday' => $holiday ? [
+                'name' => $holiday->name,
+                'type' => $holiday->type,
+                'type_name' => $holiday->type_name,
+                'description' => $holiday->description,
+            ] : null,
             'lateRecords' => $lateRecords,
             'students' => $students,
             'defaultCheckInTime' => now()->format('H:i'),
-            'cutoffTime' => '07:00',
+            'cutoffTime' => $cutoffTime,
         ]);
     }
 
@@ -89,6 +123,17 @@ class LatenessController extends Controller
             'reason' => 'required|string|max:255',
             'sanction' => 'nullable|string|max:255',
         ]);
+
+        $today = Carbon::today()->toDateString();
+        if ($validated['date'] > $today) {
+            return back()->with('error', 'Tidak dapat menginput data keterlambatan untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
+        }
+
+        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
+        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
+            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Keterlambatan tidak dapat diinput.");
+        }
 
         if ($request->user()->role === 'teacher') {
             $isAuthorizedStudent = Student::where('id', $validated['student_id'])
@@ -104,8 +149,11 @@ class LatenessController extends Controller
             }
         }
 
+        $schoolSetting = SchoolSetting::getSetting();
+        $cutoffTimeStr = substr($schoolSetting->start_time ?: '07:00', 0, 5);
+
         $checkInCarbon = Carbon::createFromFormat('H:i', substr($validated['check_in_time'], 0, 5));
-        $cutoffCarbon = Carbon::createFromFormat('H:i', '07:00');
+        $cutoffCarbon = Carbon::createFromFormat('H:i', $cutoffTimeStr);
 
         $lateMinutes = 0;
         if ($checkInCarbon->greaterThan($cutoffCarbon)) {
@@ -133,6 +181,82 @@ class LatenessController extends Controller
         );
 
         return back()->with('success', "Keterlambatan siswa berhasil dicatat ({$lateMinutes} menit terlambat).");
+    }
+
+    public function update(Request $request, Attendance $attendance): RedirectResponse
+    {
+        if ($request->user()->role === 'teacher') {
+            $isAuthorized = $attendance->student && $attendance->student->classroom &&
+                $attendance->student->classroom->homeroom_teacher_id === $request->user()->id;
+            if (! $isAuthorized) {
+                return back()->withErrors([
+                    'error' => 'Anda hanya berwenang mengubah keterlambatan siswa di kelas yang Anda ampu.',
+                ]);
+            }
+        }
+
+        $validated = $request->validate([
+            'check_in_time' => 'required',
+            'reason' => 'required|string|max:255',
+            'sanction' => 'nullable|string|max:255',
+        ]);
+
+        $today = Carbon::today()->toDateString();
+        $attendanceDate = Carbon::parse($attendance->date)->toDateString();
+        if ($attendanceDate > $today) {
+            return back()->with('error', 'Tidak dapat mengubah data keterlambatan untuk tanggal di masa mendatang.');
+        }
+
+        $holiday = \App\Models\AcademicHoliday::isHoliday($attendanceDate);
+        if ($holiday || Carbon::parse($attendanceDate)->isSunday()) {
+            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
+            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$holidayName}). Data keterlambatan tidak dapat diubah.");
+        }
+
+        $schoolSetting = SchoolSetting::getSetting();
+        $cutoffTimeStr = substr($schoolSetting->start_time ?: '07:00', 0, 5);
+
+        $checkInCarbon = Carbon::createFromFormat('H:i', substr($validated['check_in_time'], 0, 5));
+        $cutoffCarbon = Carbon::createFromFormat('H:i', $cutoffTimeStr);
+
+        $lateMinutes = 0;
+        if ($checkInCarbon->greaterThan($cutoffCarbon)) {
+            $lateMinutes = (int) abs($checkInCarbon->diffInMinutes($cutoffCarbon));
+        }
+
+        $note = 'Alasan: ' . $validated['reason'];
+        if (! empty($validated['sanction'])) {
+            $note .= ' | Sanksi/Tindakan: ' . $validated['sanction'];
+        }
+
+        $attendance->update([
+            'check_in_time' => $checkInCarbon->format('H:i:s'),
+            'is_late' => true,
+            'late_minutes' => $lateMinutes,
+            'notes' => $note,
+        ]);
+
+        $studentName = $attendance->student->name ?? 'Siswa';
+
+        return back()->with('success', "Data keterlambatan {$studentName} berhasil diperbarui ({$lateMinutes} menit terlambat).");
+    }
+
+    public function destroy(Request $request, Attendance $attendance): RedirectResponse
+    {
+        if ($request->user()->role === 'teacher') {
+            $isAuthorized = $attendance->student && $attendance->student->classroom &&
+                $attendance->student->classroom->homeroom_teacher_id === $request->user()->id;
+            if (! $isAuthorized) {
+                return back()->withErrors([
+                    'error' => 'Anda hanya berwenang menghapus keterlambatan siswa di kelas yang Anda ampu.',
+                ]);
+            }
+        }
+
+        $studentName = $attendance->student->name ?? 'Siswa';
+        $attendance->delete();
+
+        return back()->with('success', "Data keterlambatan {$studentName} berhasil dihapus.");
     }
 }
 

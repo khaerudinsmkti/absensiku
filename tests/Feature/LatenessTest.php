@@ -124,3 +124,79 @@ test('teacher can record lateness for their own student', function () {
     expect($record->is_late)->toBeTrue();
     expect($record->late_minutes)->toBe(25);
 });
+
+test('user can update lateness record', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $class = Classroom::create([
+        'name' => 'Kelas X-C',
+        'academic_year' => '2025/2026',
+    ]);
+
+    $student = Student::create([
+        'classroom_id' => $class->id,
+        'name' => 'Doni Lateness',
+        'nisn' => '0099999993',
+        'nis' => '1005',
+        'gender' => 'L',
+        'is_active' => true,
+    ]);
+
+    $attendance = Attendance::create([
+        'student_id' => $student->id,
+        'date' => now()->toDateString(),
+        'status' => 'present',
+        'check_in_time' => '07:20:00',
+        'is_late' => true,
+        'late_minutes' => 20,
+        'notes' => 'Alasan: Rantai sepeda putus',
+        'recorded_by' => $admin->id,
+    ]);
+
+    $response = $this->actingAs($admin)
+        ->put(route('attendances.lateness.update', $attendance), [
+            'check_in_time' => '07:35',
+            'reason' => 'Rantai sepeda putus dan jalan kaki',
+            'sanction' => 'Menyapu halaman 10 menit',
+        ]);
+
+    $response->assertRedirect();
+    $attendance->refresh();
+    expect($attendance->late_minutes)->toBe(35);
+    expect($attendance->notes)->toContain('Menyapu halaman 10 menit');
+});
+
+test('user can delete lateness record', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $class = Classroom::create([
+        'name' => 'Kelas X-D',
+        'academic_year' => '2025/2026',
+    ]);
+
+    $student = Student::create([
+        'classroom_id' => $class->id,
+        'name' => 'Eka DeleteMe',
+        'nisn' => '0099999994',
+        'nis' => '1006',
+        'gender' => 'P',
+        'is_active' => true,
+    ]);
+
+    $attendance = Attendance::create([
+        'student_id' => $student->id,
+        'date' => now()->toDateString(),
+        'status' => 'present',
+        'check_in_time' => '07:15:00',
+        'is_late' => true,
+        'late_minutes' => 15,
+        'notes' => 'Alasan: Salah catat',
+        'recorded_by' => $admin->id,
+    ]);
+
+    $response = $this->actingAs($admin)
+        ->delete(route('attendances.lateness.destroy', $attendance));
+
+    $response->assertRedirect();
+    expect(Attendance::find($attendance->id))->toBeNull();
+});

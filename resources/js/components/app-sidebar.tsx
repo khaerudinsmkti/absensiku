@@ -5,6 +5,7 @@ import {
     FileSpreadsheet,
     GraduationCap,
     LayoutGrid,
+    School,
     UserCheck,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
@@ -64,6 +65,18 @@ export function AppSidebar() {
                       href: '/master',
                       icon: GraduationCap,
                       isActive: url.startsWith('/master'),
+                  },
+                  {
+                      title: 'Pengaturan Sekolah',
+                      href: '/admin/school-settings',
+                      icon: School,
+                      isActive: url.startsWith('/admin/school-settings'),
+                  },
+                  {
+                      title: 'Kalender Pendidikan',
+                      href: '/admin/holidays',
+                      icon: CalendarDays,
+                      isActive: url.startsWith('/admin/holidays'),
                   },
               ]
             : []),

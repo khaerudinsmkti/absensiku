@@ -7,11 +7,12 @@ import {
     HeartPulse,
     Paperclip,
     PlusCircle,
+    Search,
     Upload,
     UserCheck,
     Users,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { PageBanner } from '@/components/page-banner';
 import { StatCard } from '@/components/stat-card';
 import { Button } from '@/components/ui/button';
@@ -37,22 +38,48 @@ interface EligibleStudent {
     student_id: number;
     name: string;
     nisn: string;
+    classroom_id?: number;
     classroom: string;
+}
+
+interface ClassroomItem {
+    id: number;
+    name: string;
+}
+
+interface HolidayInfo {
+    name: string;
+    type: string;
+    type_name: string;
+    description?: string;
 }
 
 interface AdjustmentsProps {
     selectedDate: string;
+    isFutureDate?: boolean;
+    holiday?: HolidayInfo | null;
     adjustments: AdjustmentRecord[];
     eligibleStudents: EligibleStudent[];
+    classrooms?: ClassroomItem[];
     defaultDepartureTime: string;
 }
 
 export default function AdjustmentsPage({
     selectedDate,
+    isFutureDate = false,
+    holiday = null,
     adjustments = [],
     eligibleStudents = [],
+    classrooms = [],
     defaultDepartureTime,
 }: AdjustmentsProps) {
+    const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+    const isFuture = isFutureDate || selectedDate > todayStr;
+    const isBlocked = !!holiday || isFuture;
+
+    const [selectedClassId, setSelectedClassId] = useState<string>('');
+    const [searchTerm, setSearchTerm] = useState<string>('');
+
     const { data, setData, post, processing, reset, errors } = useForm({
         attendance_id: '' as string | number,
         type: 'early_leave_sick',
@@ -70,12 +97,54 @@ export default function AdjustmentsPage({
         );
     };
 
+    // Available classrooms for filter
+    const availableClassrooms = useMemo(() => {
+        if (classrooms && classrooms.length > 0) {
+            return classrooms;
+        }
+        const seen = new Set<string>();
+        const list: ClassroomItem[] = [];
+        eligibleStudents.forEach((s) => {
+            if (s.classroom && !seen.has(s.classroom)) {
+                seen.add(s.classroom);
+                list.push({ id: s.classroom_id || list.length + 1, name: s.classroom });
+            }
+        });
+        return list;
+    }, [classrooms, eligibleStudents]);
+
+    // Filter eligible students by classroom and search term
+    const filteredEligibleStudents = useMemo(() => {
+        let list = eligibleStudents;
+
+        if (selectedClassId) {
+            list = list.filter(
+                (s) =>
+                    String(s.classroom_id) === String(selectedClassId) ||
+                    s.classroom.toLowerCase() === selectedClassId.toLowerCase(),
+            );
+        }
+
+        if (searchTerm.trim()) {
+            const lower = searchTerm.toLowerCase();
+            list = list.filter(
+                (s) =>
+                    s.name.toLowerCase().includes(lower) ||
+                    s.nisn.includes(lower) ||
+                    s.classroom.toLowerCase().includes(lower),
+            );
+        }
+
+        return list;
+    }, [eligibleStudents, selectedClassId, searchTerm]);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         post('/attendances/adjustments', {
             forceFormData: true,
             onSuccess: () => {
                 reset('attendance_id', 'reason', 'pickup_person', 'proof');
+                setSearchTerm('');
             },
         });
     };
@@ -125,6 +194,39 @@ export default function AdjustmentsPage({
                     />
                 </div>
 
+                {/* Holiday / Future Date Warning Banner */}
+                {holiday && (
+                    <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950/40">
+                        <div className="flex items-center gap-3">
+                            <AlertCircle className="size-5 text-red-600 dark:text-red-400 shrink-0" />
+                            <div>
+                                <h4 className="text-sm font-bold text-red-800 dark:text-red-200">
+                                    Hari Libur: {holiday.name} ({holiday.type_name})
+                                </h4>
+                                <p className="text-xs text-red-700 dark:text-red-300 mt-0.5">
+                                    {holiday.description || 'Tanggal yang dipilih merupakan hari libur. Pencatatan izin pulang awal / absen khusus dinonaktifkan.'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {!holiday && isFuture && (
+                    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+                        <div className="flex items-center gap-3">
+                            <AlertCircle className="size-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-800 dark:text-amber-200">
+                                    Tanggal Melebihi Hari Ini (Tanggal Maju)
+                                </h4>
+                                <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                                    Pencatatan izin pulang awal tidak dapat dilakukan untuk tanggal di masa mendatang. Silakan pilih tanggal hari ini atau sebelumnya.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Form: Input Absen Khusus */}
                     <div className="lg:col-span-1 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-6 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
@@ -133,31 +235,94 @@ export default function AdjustmentsPage({
                             Formulir Izin Pulang Awal
                         </h2>
 
+                        {isBlocked && (
+                            <div className="mb-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
+                                ⚠️ Penginputan dinonaktifkan karena tanggal yang dipilih adalah hari libur atau melebihi hari ini.
+                            </div>
+                        )}
+
                         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-                            <div>
-                                <label className="text-xs font-bold text-[#6B7280] uppercase tracking-wider block mb-1.5">
+                            {/* Pilih Siswa dengan Filter Kelas & Fitur Pencarian Nama (mirip Form Entri Keterlambatan) */}
+                            <div className="flex flex-col gap-2.5">
+                                <label className="text-xs font-bold text-[#6B7280] uppercase tracking-wider block">
                                     Pilih Siswa (Yang Hadir Hari Ini):
                                 </label>
-                                <select
-                                    value={data.attendance_id}
-                                    onChange={(e) => setData('attendance_id', e.target.value)}
-                                    className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-xs font-medium text-gray-800 focus:border-[#FF6B35] focus:outline-none"
-                                    required
-                                >
-                                    <option value="">-- Pilih Siswa Hadir --</option>
-                                    {eligibleStudents.map((s) => (
-                                        <option key={s.attendance_id} value={s.attendance_id}>
-                                            {s.name} ({s.classroom} - {s.nisn})
+
+                                {/* 1. Filter Kelas */}
+                                <div>
+                                    <label className="text-[11px] font-semibold text-gray-500 block mb-1 dark:text-gray-400">
+                                        Filter Kelas:
+                                    </label>
+                                    <select
+                                        value={selectedClassId}
+                                        onChange={(e) => {
+                                            setSelectedClassId(e.target.value);
+                                            setData('attendance_id', '');
+                                        }}
+                                        disabled={isBlocked}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-1.5 text-xs font-medium text-gray-800 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white dark:disabled:bg-gray-800 cursor-pointer"
+                                    >
+                                        <option value="">-- Semua Kelas --</option>
+                                        {availableClassrooms.map((c) => (
+                                            <option key={c.id} value={c.id}>
+                                                {c.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                {/* 2. Fitur Pencarian Nama */}
+                                <div>
+                                    <label className="text-[11px] font-semibold text-gray-500 block mb-1 dark:text-gray-400">
+                                        Cari Nama / NISN Siswa:
+                                    </label>
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-2.5 size-3.5 text-gray-400" />
+                                        <input
+                                            type="text"
+                                            placeholder={eligibleStudents.length === 0 ? "Tidak ada siswa hadir..." : "Ketik NISN atau nama siswa..."}
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            disabled={isBlocked || eligibleStudents.length === 0}
+                                            className="w-full rounded-xl border-2 border-[#E8E8E8] pl-8 pr-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white dark:disabled:bg-gray-800"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* 3. Select Siswa Hadir */}
+                                <div>
+                                    <label className="text-[11px] font-semibold text-gray-500 block mb-1 dark:text-gray-400">
+                                        Daftar Siswa:
+                                    </label>
+                                    <select
+                                        value={data.attendance_id}
+                                        onChange={(e) => setData('attendance_id', e.target.value)}
+                                        disabled={isBlocked || filteredEligibleStudents.length === 0}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-xs font-medium text-gray-800 focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15 disabled:bg-gray-100 disabled:text-gray-400 dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white dark:disabled:bg-gray-800 cursor-pointer"
+                                        required
+                                    >
+                                        <option value="">
+                                            {eligibleStudents.length === 0
+                                                ? '-- Belum ada siswa berstatus hadir --'
+                                                : filteredEligibleStudents.length === 0
+                                                  ? '-- Tidak ada siswa yang cocok dengan filter --'
+                                                  : '-- Pilih Siswa Izin Pulang --'}
                                         </option>
-                                    ))}
-                                </select>
+                                        {filteredEligibleStudents.map((s) => (
+                                            <option key={s.attendance_id} value={s.attendance_id}>
+                                                {s.name} ({s.classroom} - {s.nisn})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
                                 {eligibleStudents.length === 0 && (
-                                    <p className="text-[11px] text-amber-600 mt-1">
+                                    <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">
                                         *Belum ada siswa yang berstatus hadir pada tanggal ini.
                                     </p>
                                 )}
                                 {errors.attendance_id && (
-                                    <p className="text-red-500 text-[11px] mt-1">{errors.attendance_id}</p>
+                                    <p className="text-red-500 text-[11px] mt-0.5">{errors.attendance_id}</p>
                                 )}
                             </div>
 
@@ -169,7 +334,8 @@ export default function AdjustmentsPage({
                                     <select
                                         value={data.type}
                                         onChange={(e) => setData('type', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-2 text-xs font-semibold text-gray-800 focus:border-[#FF6B35] focus:outline-none"
+                                        disabled={isBlocked}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-2 text-xs font-semibold text-gray-800 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                     >
                                         <option value="early_leave_sick">Sakit di Sekolah</option>
                                         <option value="early_leave_urgent">Keperluan Mendesak</option>
@@ -184,7 +350,8 @@ export default function AdjustmentsPage({
                                         type="time"
                                         value={data.departure_time}
                                         onChange={(e) => setData('departure_time', e.target.value)}
-                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-bold text-gray-800 focus:border-[#FF6B35] focus:outline-none"
+                                        disabled={isBlocked}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs font-bold text-gray-800 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                         required
                                     />
                                 </div>
@@ -199,7 +366,8 @@ export default function AdjustmentsPage({
                                     placeholder="Contoh: Mengeluh demam tinggi dan mual saat jam istirahat..."
                                     value={data.reason}
                                     onChange={(e) => setData('reason', e.target.value)}
-                                    className="w-full rounded-xl border-2 border-[#E8E8E8] p-2.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none"
+                                    disabled={isBlocked}
+                                    className="w-full rounded-xl border-2 border-[#E8E8E8] p-2.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                     required
                                 />
                                 {errors.reason && (
@@ -216,7 +384,8 @@ export default function AdjustmentsPage({
                                     placeholder="Contoh: Ibu Kandung (Ibu Dewi)"
                                     value={data.pickup_person}
                                     onChange={(e) => setData('pickup_person', e.target.value)}
-                                    className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none"
+                                    disabled={isBlocked}
+                                    className="w-full rounded-xl border-2 border-[#E8E8E8] px-3 py-2 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                 />
                             </div>
 
@@ -231,7 +400,8 @@ export default function AdjustmentsPage({
                                         onChange={(e) =>
                                             setData('proof', e.target.files ? e.target.files[0] : null)
                                         }
-                                        className="text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#FFF0EB] file:text-[#FF6B35] hover:file:bg-[#FFE66D]"
+                                        disabled={isBlocked}
+                                        className="text-xs text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[#FFF0EB] file:text-[#FF6B35] hover:file:bg-[#FFE66D] disabled:opacity-50"
                                     />
                                 </div>
                             </div>
@@ -239,8 +409,8 @@ export default function AdjustmentsPage({
                             <Button
                                 type="submit"
                                 variant="primary"
-                                disabled={processing || !data.attendance_id}
-                                className="w-full mt-2 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
+                                disabled={isBlocked || processing || !data.attendance_id}
+                                className="w-full mt-2 font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {processing ? 'Memproses...' : 'Verifikasi & Catat Izin Pulang'}
                             </Button>
@@ -262,6 +432,7 @@ export default function AdjustmentsPage({
                                 <span className="text-xs font-bold text-[#6B7280]">Tanggal:</span>
                                 <input
                                     type="date"
+                                    max={todayStr}
                                     value={selectedDate}
                                     onChange={(e) => handleDateChange(e.target.value)}
                                     className="rounded-xl border border-[#E8E8E8] px-2.5 py-1 text-xs font-semibold text-gray-800 focus:border-[#FF6B35] outline-none"

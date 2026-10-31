@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attendance;
 use App\Models\AttendanceAdjustment;
+use App\Models\Classroom;
 use App\Models\Student;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -18,51 +19,93 @@ class AttendanceAdjustmentController extends Controller
     {
         $today = Carbon::today()->toDateString();
         $date = $request->input('date', $today);
+        $user = $request->user();
 
         // Fetch adjustments for the date
-        $adjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($date) {
+        $adjustmentsQuery = AttendanceAdjustment::whereHas('attendance', function ($q) use ($date) {
             $q->where('date', $date);
         })
         ->with(['attendance.student.classroom', 'approvedBy'])
-        ->latest()
-        ->get()
-        ->map(function ($adj) {
-            return [
-                'id' => $adj->id,
-                'attendance_id' => $adj->attendance_id,
-                'student_name' => $adj->attendance->student->name,
-                'nisn' => $adj->attendance->student->nisn,
-                'classroom' => $adj->attendance->student->classroom->name,
-                'type' => $adj->type,
-                'type_name' => $adj->type_name,
-                'departure_time' => substr($adj->departure_time, 0, 5),
-                'reason' => $adj->reason,
-                'pickup_person' => $adj->pickup_person,
-                'attachment_url' => $adj->attachment_path ? asset('storage/' . $adj->attachment_path) : null,
-                'approved_by' => $adj->approvedBy->name,
-                'created_at' => $adj->created_at->format('H:i'),
-            ];
-        });
+        ->latest();
+
+        if ($user->role === 'teacher') {
+            $adjustmentsQuery->whereHas('attendance.student.classroom', function ($q) use ($user) {
+                $q->where('homeroom_teacher_id', $user->id);
+            });
+        }
+
+        $adjustments = $adjustmentsQuery->get()
+            ->map(function ($adj) {
+                return [
+                    'id' => $adj->id,
+                    'attendance_id' => $adj->attendance_id,
+                    'student_name' => $adj->attendance->student->name,
+                    'nisn' => $adj->attendance->student->nisn,
+                    'classroom' => $adj->attendance->student->classroom->name,
+                    'type' => $adj->type,
+                    'type_name' => $adj->type_name,
+                    'departure_time' => substr($adj->departure_time, 0, 5),
+                    'reason' => $adj->reason,
+                    'pickup_person' => $adj->pickup_person,
+                    'attachment_url' => $adj->attachment_path ? asset('storage/' . $adj->attachment_path) : null,
+                    'approved_by' => $adj->approvedBy->name,
+                    'created_at' => $adj->created_at->format('H:i'),
+                ];
+            });
 
         // Students who are present today and can request mid-day leave
-        $eligibleStudents = Attendance::where('date', $date)
+        $eligibleStudentsQuery = Attendance::where('date', $date)
             ->where('status', 'present')
-            ->with('student.classroom')
-            ->get()
+            ->with('student.classroom');
+
+        if ($user->role === 'teacher') {
+            $eligibleStudentsQuery->whereHas('student.classroom', function ($q) use ($user) {
+                $q->where('homeroom_teacher_id', $user->id);
+            });
+        }
+
+        $eligibleStudents = $eligibleStudentsQuery->get()
             ->map(function ($att) {
                 return [
                     'attendance_id' => $att->id,
                     'student_id' => $att->student_id,
                     'name' => $att->student->name,
                     'nisn' => $att->student->nisn,
+                    'classroom_id' => $att->student->classroom_id,
                     'classroom' => $att->student->classroom->name,
                 ];
             });
 
+        // Classrooms list for filter
+        $classroomsQuery = Classroom::orderBy('name');
+        if ($user->role === 'teacher') {
+            $classroomsQuery->where('homeroom_teacher_id', $user->id);
+        }
+        $classrooms = $classroomsQuery->get(['id', 'name']);
+
+        $isFutureDate = $date > $today;
+        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
+        if (! $holiday && Carbon::parse($date)->isSunday()) {
+            $holiday = (object) [
+                'name' => 'Hari Minggu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan',
+                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
+            ];
+        }
+
         return Inertia::render('attendances/adjustments', [
             'selectedDate' => $date,
+            'isFutureDate' => $isFutureDate,
+            'holiday' => $holiday ? [
+                'name' => $holiday->name,
+                'type' => $holiday->type,
+                'type_name' => $holiday->type_name,
+                'description' => $holiday->description,
+            ] : null,
             'adjustments' => $adjustments,
             'eligibleStudents' => $eligibleStudents,
+            'classrooms' => $classrooms,
             'defaultDepartureTime' => now()->format('H:i'),
         ]);
     }
@@ -79,6 +122,30 @@ class AttendanceAdjustmentController extends Controller
         ]);
 
         $attendance = Attendance::findOrFail($validated['attendance_id']);
+
+        $today = Carbon::today()->toDateString();
+        $attendanceDate = Carbon::parse($attendance->date)->toDateString();
+        if ($attendanceDate > $today) {
+            return back()->with('error', 'Tidak dapat menginput absen khusus untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
+        }
+
+        $holiday = \App\Models\AcademicHoliday::isHoliday($attendanceDate);
+        if ($holiday || Carbon::parse($attendanceDate)->isSunday()) {
+            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
+            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$holidayName}). Absen khusus tidak dapat diinput.");
+        }
+
+        if ($request->user()->role === 'teacher') {
+            $isAuthorized = Attendance::where('id', $validated['attendance_id'])
+                ->whereHas('student.classroom', function ($q) use ($request) {
+                    $q->where('homeroom_teacher_id', $request->user()->id);
+                })
+                ->exists();
+
+            if (! $isAuthorized) {
+                abort(403, 'Anda tidak berwenang menginput izin pulang awal untuk siswa di luar kelas yang Anda ampu.');
+            }
+        }
 
         DB::transaction(function () use ($validated, $request, $attendance) {
             $path = null;

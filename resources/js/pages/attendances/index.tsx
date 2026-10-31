@@ -1,6 +1,7 @@
 import { Head, router, useForm } from '@inertiajs/react';
 import {
     AlertCircle,
+    CalendarRange,
     CheckCircle2,
     Clock,
     GraduationCap,
@@ -39,6 +40,13 @@ interface AttendanceIndexProps {
     selectedClassroom: ClassroomData | null;
     selectedClassroomId: number;
     selectedDate: string;
+    isFutureDate?: boolean;
+    holiday?: {
+        name: string;
+        type: string;
+        type_name: string;
+        description?: string | null;
+    } | null;
     students: StudentItem[];
 }
 
@@ -47,8 +55,14 @@ export default function AttendanceIndex({
     selectedClassroom,
     selectedClassroomId,
     selectedDate,
+    isFutureDate = false,
+    holiday,
     students = [],
 }: AttendanceIndexProps) {
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const isFuture = isFutureDate || selectedDate > todayStr;
+    const isBlocked = !!holiday || isFuture;
+
     const { data, setData, post, processing, wasSuccessful } = useForm({
         classroom_id: selectedClassroomId,
         date: selectedDate,
@@ -146,6 +160,45 @@ export default function AttendanceIndex({
                     }
                 />
 
+                {/* Holiday Notice if selected date is holiday */}
+                {holiday && (
+                    <div className="flex items-center gap-3.5 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-red-900 shadow-sm dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200">
+                            <CalendarRange className="size-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-extrabold text-red-950 dark:text-red-100">
+                                    Peringatan Hari Libur: {holiday.name}
+                                </span>
+                                <span className="rounded-md bg-red-200/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-900 dark:bg-red-900 dark:text-red-200">
+                                    {holiday.type_name}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-red-800/90 dark:text-red-300/90 font-medium">
+                                {holiday.description || 'Tanggal yang dipilih merupakan hari libur. Presensi siswa tidak dapat diinput pada hari libur.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Future Date Warning */}
+                {isFuture && (
+                    <div className="flex items-center gap-3.5 rounded-2xl border-2 border-red-300 bg-red-50 p-4 text-red-900 shadow-sm dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200">
+                            <AlertCircle className="size-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <span className="text-sm font-extrabold text-red-950 dark:text-red-100">
+                                Tanggal Masa Depan Tidak Diperbolehkan
+                            </span>
+                            <p className="mt-0.5 text-xs text-red-800/90 dark:text-red-300/90 font-medium">
+                                Anda tidak dapat menginput presensi untuk tanggal maju dari hari ini. Silakan pilih tanggal hari ini atau sebelumnya.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Filter and Control Bar */}
                 <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                     <div className="flex flex-col gap-4 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] lg:flex-row lg:items-center lg:justify-between dark:border-[#2D234A] dark:bg-[#18122B]">
@@ -177,6 +230,7 @@ export default function AttendanceIndex({
                                 <input
                                     type="date"
                                     value={selectedDate}
+                                    max={todayStr}
                                     onChange={(e) => handleDateChange(e.target.value)}
                                     className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white"
                                 />
@@ -188,8 +242,9 @@ export default function AttendanceIndex({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
+                                disabled={isBlocked}
                                 onClick={handleSetAllPresent}
-                                className="font-semibold text-xs border border-gray-200 hover:bg-gray-100"
+                                className="font-semibold text-xs border border-gray-200 hover:bg-gray-100 disabled:opacity-50"
                             >
                                 <CheckCircle2 className="size-4 mr-1 text-emerald-600" />
                                 Set Semua Hadir
@@ -197,8 +252,8 @@ export default function AttendanceIndex({
                             <Button
                                 type="submit"
                                 variant="primary"
-                                disabled={processing || students.length === 0}
-                                className="font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
+                                disabled={processing || students.length === 0 || isBlocked}
+                                className="font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all disabled:opacity-50"
                             >
                                 <Save className="size-4 mr-1.5" />
                                 {processing ? 'Menyimpan...' : 'Simpan Presensi Kelas'}
@@ -319,6 +374,7 @@ export default function AttendanceIndex({
                                                         <AttendanceRadioGroup
                                                             name={`status-${student.id}`}
                                                             value={mappedVal}
+                                                            disabled={isBlocked}
                                                             onChange={(val) => {
                                                                 const dbVal = val === 'hadir' ? 'present'
                                                                     : val === 'sakit' ? 'sick'
@@ -331,16 +387,19 @@ export default function AttendanceIndex({
                                                     <td className="px-5 py-3.5">
                                                         <input
                                                             type="text"
+                                                            disabled={isBlocked}
                                                             placeholder={
-                                                                currentStatus === 'present'
-                                                                    ? 'Tepat waktu (opsional)'
-                                                                    : 'Tuliskan alasan / surat...'
+                                                                isBlocked
+                                                                    ? 'Tidak dapat diisi (libur / non-aktif)'
+                                                                    : currentStatus === 'present'
+                                                                      ? 'Tepat waktu (opsional)'
+                                                                      : 'Tuliskan alasan / surat...'
                                                             }
                                                             value={currentEntry?.notes ?? ''}
                                                             onChange={(e) =>
                                                                 handleNotesChange(student.id, e.target.value)
                                                             }
-                                                            className="w-full max-w-sm rounded-lg border border-[#E8E8E8] px-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15"
+                                                            className="w-full max-w-sm rounded-lg border border-[#E8E8E8] px-3 py-1.5 text-xs text-gray-800 placeholder-gray-400 focus:border-[#FF6B35] focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/15 disabled:bg-gray-100 disabled:text-gray-400 dark:disabled:bg-gray-800"
                                                         />
                                                     </td>
                                                 </tr>

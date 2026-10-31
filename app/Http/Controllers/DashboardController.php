@@ -108,10 +108,28 @@ class DashboardController extends Controller
                 });
         }
 
+        $isFutureDate = $date > $today;
+        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
+        if (! $holiday && Carbon::parse($date)->isSunday()) {
+            $holiday = (object) [
+                'name' => 'Hari Minggu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan',
+                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
+            ];
+        }
+
         return Inertia::render('dashboard', [
             'classrooms' => $classrooms,
             'selectedClassroomId' => (int) $selectedClassroomId,
             'selectedDate' => $date,
+            'isFutureDate' => $isFutureDate,
+            'holiday' => $holiday ? [
+                'name' => $holiday->name,
+                'type' => $holiday->type,
+                'type_name' => $holiday->type_name,
+                'description' => $holiday->description,
+            ] : null,
             'stats' => [
                 'total_students' => $totalStudents,
                 'total_hadir' => $totalHadir,

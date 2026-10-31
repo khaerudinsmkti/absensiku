@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Head, router } from '@inertiajs/react';
 import {
     AlertCircle,
+    CalendarRange,
     CheckCircle2,
     Clock,
     Download,
@@ -20,6 +22,13 @@ interface DashboardProps {
     classrooms: ClassroomData[];
     selectedClassroomId: number;
     selectedDate: string;
+    isFutureDate?: boolean;
+    holiday?: {
+        name: string;
+        type: string;
+        type_name: string;
+        description?: string | null;
+    } | null;
     stats: {
         total_students: number;
         total_hadir: number;
@@ -37,9 +46,15 @@ export default function Dashboard({
     classrooms = [],
     selectedClassroomId,
     selectedDate,
+    isFutureDate = false,
+    holiday,
     stats,
     students = [],
 }: DashboardProps) {
+    const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
+    const isFuture = isFutureDate || selectedDate > todayStr;
+    const isBlocked = !!holiday || isFuture;
+
     const handleClassChange = (newClassId: string) => {
         router.get(
             '/dashboard',
@@ -63,6 +78,8 @@ export default function Dashboard({
     };
 
     const handleQuickStatusChange = (studentId: number, status: AttendanceStatus) => {
+        if (isBlocked) return;
+
         const mappedStatus = status === 'hadir' ? 'present'
             : status === 'sakit' ? 'sick'
             : status === 'izin' ? 'permit'
@@ -105,6 +122,44 @@ export default function Dashboard({
                         </div>
                     }
                 />
+
+                {/* Holiday Banner if today / selected date is a holiday */}
+                {holiday && (
+                    <div className="flex items-center gap-3.5 rounded-2xl border-2 border-red-300/80 bg-red-50 p-4 text-red-900 shadow-sm dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-200">
+                            <CalendarRange className="size-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-extrabold text-red-950 dark:text-red-100">
+                                    Hari Libur: {holiday.name}
+                                </span>
+                                <span className="rounded-md bg-red-200/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-900 dark:bg-red-900 dark:text-red-200">
+                                    {holiday.type_name}
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-red-800/90 dark:text-red-300/90">
+                                {holiday.description || 'Tanggal ini tercatat sebagai hari libur pada Kalender Pendidikan. Presensi siswa dinonaktifkan hari ini.'}
+                            </p>
+                        </div>
+                    </div>
+                )}
+
+                {!holiday && isFuture && (
+                    <div className="flex items-center gap-3.5 rounded-2xl border-2 border-amber-300/80 bg-amber-50 p-4 text-amber-900 shadow-sm dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
+                            <AlertCircle className="size-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <span className="text-sm font-extrabold text-amber-950 dark:text-amber-100">
+                                Tanggal Melebihi Hari Ini (Tanggal Maju)
+                            </span>
+                            <p className="mt-0.5 text-xs text-amber-800/90 dark:text-amber-300/90">
+                                Tidak dapat menginput atau memperbarui presensi untuk tanggal di masa mendatang. Silakan pilih hari ini atau sebelumnya.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* 2. Stats Grid */}
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -169,6 +224,7 @@ export default function Dashboard({
                             </span>
                             <input
                                 type="date"
+                                max={todayStr}
                                 value={selectedDate}
                                 onChange={(e) => handleDateChange(e.target.value)}
                                 className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-1.5 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white"
@@ -303,6 +359,7 @@ export default function Dashboard({
                                                         student.status as AttendanceStatus
                                                     }
                                                     compact
+                                                    disabled={isBlocked}
                                                     onChange={(val) =>
                                                         handleQuickStatusChange(student.id, val)
                                                     }

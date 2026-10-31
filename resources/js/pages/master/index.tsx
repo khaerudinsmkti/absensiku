@@ -23,6 +23,7 @@ import {
     X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { PageBanner } from '@/components/page-banner';
 import { Button } from '@/components/ui/button';
@@ -227,6 +228,7 @@ export default function MasterIndexPage({
         if (confirm(`Apakah Anda yakin ingin menghapus data siswa ${s.name}?`)) {
             router.delete(`/master/students/${s.id}`, {
                 preserveScroll: true,
+                onError: () => toast.error(`Gagal menghapus data siswa ${s.name}.`),
             });
         }
     };
@@ -292,15 +294,23 @@ export default function MasterIndexPage({
                 }
 
                 setParsedData(rows);
+                if (rows.length === 0) {
+                    toast.warning('Tidak ditemukan baris data siswa yang valid pada berkas Excel.');
+                } else {
+                    toast.success(`${rows.length} baris data siswa berhasil dibaca dari berkas.`);
+                }
             } catch (err) {
-                alert('Gagal membaca file Excel. Pastikan format file adalah .xlsx atau .csv');
+                toast.error('Gagal membaca file Excel. Pastikan format file adalah .xlsx, .xls, atau .csv');
             }
         };
         reader.readAsArrayBuffer(file);
     };
 
     const handlePasteProcess = () => {
-        if (!pasteText.trim()) return;
+        if (!pasteText.trim()) {
+            toast.error('Silakan tempel teks tabel Excel terlebih dahulu pada kolom yang disediakan.');
+            return;
+        }
 
         const lines = pasteText.split(/\r?\n/);
         const rows: ParsedStudentRow[] = [];
@@ -346,10 +356,18 @@ export default function MasterIndexPage({
         });
 
         setParsedData(rows);
+        if (rows.length === 0) {
+            toast.warning('Tidak ada baris data siswa yang valid ditemukan dari teks yang ditempel.');
+        } else {
+            toast.success(`${rows.length} baris data siswa berhasil dibaca dari clipboard.`);
+        }
     };
 
     const handleExecuteImport = () => {
-        if (parsedData.length === 0) return;
+        if (parsedData.length === 0) {
+            toast.error('Tidak ada data siswa yang valid untuk diimpor.');
+            return;
+        }
 
         router.post(
             '/master/students/batch-import',
@@ -362,6 +380,10 @@ export default function MasterIndexPage({
                     setShowImportModal(false);
                     setParsedData([]);
                     setPasteText('');
+                },
+                onError: (errs) => {
+                    const firstErr = Object.values(errs)[0];
+                    toast.error(typeof firstErr === 'string' ? firstErr : 'Gagal mengimpor data siswa.');
                 },
             },
         );
@@ -419,6 +441,7 @@ export default function MasterIndexPage({
         if (confirm(`Apakah Anda yakin ingin menghapus data guru ${t.name}?`)) {
             router.delete(`/master/teachers/${t.id}`, {
                 preserveScroll: true,
+                onError: () => toast.error(`Gagal menghapus data guru ${t.name}.`),
             });
         }
     };
@@ -454,7 +477,7 @@ export default function MasterIndexPage({
     const handleDeleteClass = (c: ClassroomItem) => {
         const studentCount = c.students?.length ?? 0;
         if (studentCount > 0) {
-            alert(`Kelas ${c.name} tidak dapat dihapus karena masih memiliki ${studentCount} siswa terdaftar. Pindahkan atau hapus data siswa terlebih dahulu.`);
+            toast.error(`Kelas ${c.name} tidak dapat dihapus karena masih memiliki ${studentCount} siswa terdaftar. Pindahkan atau hapus data siswa terlebih dahulu.`);
             return;
         }
 
@@ -465,6 +488,9 @@ export default function MasterIndexPage({
                     if (editingClass?.id === c.id) {
                         cancelEditClass();
                     }
+                },
+                onError: () => {
+                    toast.error(`Gagal menghapus kelas ${c.name}.`);
                 },
             });
         }
@@ -504,6 +530,9 @@ export default function MasterIndexPage({
                     if (editingDuty?.id === ds.id) {
                         cancelEditDuty();
                     }
+                },
+                onError: () => {
+                    toast.error(`Gagal menghapus jadwal piket hari ${ds.day_name}.`);
                 },
             });
         }

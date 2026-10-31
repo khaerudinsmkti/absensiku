@@ -3,9 +3,11 @@
 use App\Http\Controllers\AttendanceAdjustmentController;
 use App\Http\Controllers\AttendanceController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LatenessController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SchoolSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -22,6 +24,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 3. Pelacak Keterlambatan Siswa
     Route::get('/attendances/lateness', [LatenessController::class, 'index'])->name('attendances.lateness');
     Route::post('/attendances/lateness', [LatenessController::class, 'store'])->name('attendances.lateness.store');
+    Route::put('/attendances/lateness/{attendance}', [LatenessController::class, 'update'])->name('attendances.lateness.update');
+    Route::delete('/attendances/lateness/{attendance}', [LatenessController::class, 'destroy'])->name('attendances.lateness.destroy');
 
     // 4. Absen Khusus / Izin Pulang Awal
     Route::get('/attendances/adjustments', [AttendanceAdjustmentController::class, 'index'])->name('attendances.adjustments');
@@ -30,6 +34,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 5. Rekapitulasi & Ekspor Laporan
     Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
+    Route::get('/reports/export-pdf', [ReportController::class, 'exportPdf'])->name('reports.export-pdf');
 
     // 6. Master Data (Kelas, Siswa, Guru, Jadwal Piket) - Khusus Admin
     Route::middleware('role:admin')->group(function () {
@@ -51,6 +56,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/master/teachers', [MasterDataController::class, 'storeTeacher'])->name('master.teachers.store');
         Route::put('/master/teachers/{user}', [MasterDataController::class, 'updateTeacher'])->name('master.teachers.update');
         Route::delete('/master/teachers/{user}', [MasterDataController::class, 'destroyTeacher'])->name('master.teachers.destroy');
+
+        // Pengaturan Sekolah (Identitas, Logo, Jam Masuk, Kepala Sekolah)
+        Route::get('/admin/school-settings', [SchoolSettingController::class, 'edit'])->name('school-settings.edit');
+        Route::post('/admin/school-settings', [SchoolSettingController::class, 'update'])->name('school-settings.update');
+
+        // Kalender Pendidikan & Hari Libur Nasional
+        Route::get('/admin/holidays', [HolidayController::class, 'index'])->name('holidays.index');
+        Route::post('/admin/holidays', [HolidayController::class, 'store'])->name('holidays.store');
+        Route::put('/admin/holidays/{holiday}', [HolidayController::class, 'update'])->name('holidays.update');
+        Route::delete('/admin/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
+        Route::post('/admin/holidays/seed', [HolidayController::class, 'seed'])->name('holidays.seed');
     });
 });
 
