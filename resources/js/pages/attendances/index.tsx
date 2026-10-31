@@ -304,7 +304,7 @@ export default function AttendanceIndex({
                                         <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
                                             No
                                         </th>
-                                        <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
+                                        <th className="hidden sm:table-cell px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
                                             NISN / NIS
                                         </th>
                                         <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
@@ -347,12 +347,15 @@ export default function AttendanceIndex({
                                                     <td className="px-5 py-3.5 font-bold text-[#6B7280]">
                                                         {idx + 1}
                                                     </td>
-                                                    <td className="px-5 py-3.5 font-mono text-xs text-[#6B7280]">
+                                                    <td className="hidden sm:table-cell px-5 py-3.5 font-mono text-xs text-[#6B7280]">
                                                         <div>{student.nisn}</div>
                                                         <div className="text-[11px] text-gray-400">NIS: {student.nis}</div>
                                                     </td>
                                                     <td className="px-5 py-3.5 font-bold text-[#1F2937] dark:text-white">
                                                         <div>{student.name}</div>
+                                                        <div className="text-[11px] font-normal text-gray-400 font-mono sm:hidden">
+                                                            NISN: {student.nisn}
+                                                        </div>
                                                         {student.adjustment && (
                                                             <span className="mt-1 inline-flex items-center gap-1 rounded bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-bold text-[#0F766E]">
                                                                 {student.adjustment.type_name} ({student.adjustment.departure_time})

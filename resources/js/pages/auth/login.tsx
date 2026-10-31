@@ -7,7 +7,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import { register } from '@/routes';
 import { store } from '@/routes/login';
 import { request } from '@/routes/password';
 import PasskeyVerify from '@/components/passkey-verify';
@@ -20,7 +19,7 @@ type Props = {
 export default function Login({ status, canResetPassword }: Props) {
     return (
         <>
-            <Head title="Log in" />
+            <Head title="Masuk ke Sistem" />
 
             <PasskeyVerify />
 
@@ -40,17 +39,17 @@ export default function Login({ status, canResetPassword }: Props) {
                         <div className="grid gap-5">
                             <div className="grid gap-2">
                                 <Label htmlFor="email" className="font-semibold text-[#374151] dark:text-[#E8E8E8]">
-                                    Email atau NIP / Akun
+                                    NIP atau Email
                                 </Label>
                                 <Input
                                     id="email"
-                                    type="email"
+                                    type="text"
                                     name="email"
                                     required
                                     autoFocus
                                     tabIndex={1}
-                                    autoComplete="email"
-                                    placeholder="nama@sekolah.sch.id"
+                                    autoComplete="username"
+                                    placeholder="Masukkan NIP atau Email Anda"
                                 />
                                 <InputError message={errors.email} />
                             </div>
@@ -104,13 +103,6 @@ export default function Login({ status, canResetPassword }: Props) {
                                 Masuk ke Sistem
                             </Button>
                         </div>
-
-                        <div className="text-center text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                            Belum memiliki akun guru / staf?{' '}
-                            <TextLink href={register()} tabIndex={5}>
-                                Daftar Sekarang
-                            </TextLink>
-                        </div>
                     </>
                 )}
             </Form>
@@ -119,6 +111,6 @@ export default function Login({ status, canResetPassword }: Props) {
 }
 
 Login.layout = {
-    title: 'Masuk ke AbsensiKu',
-    description: 'Masukkan email dan kata sandi Anda untuk mulai mengelola presensi siswa.',
+    title: 'Masuk ke Sistem Presensi',
+    description: 'Masukkan NIP atau Email serta kata sandi Anda untuk mulai mengelola presensi siswa.',
 };

@@ -63,6 +63,42 @@ test('users can logout', function () {
     $this->assertGuest();
 });
 
+test('users can authenticate using NIP', function () {
+    $user = User::factory()->create([
+        'nip' => '198501012010011001',
+        'password' => bcrypt('rahasia123'),
+    ]);
+
+    $response = $this->post(route('login.store'), [
+        'email' => '198501012010011001',
+        'password' => 'rahasia123',
+    ]);
+
+    $this->assertAuthenticatedAs($user);
+    $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('users can authenticate using username', function () {
+    $user = User::factory()->create([
+        'username' => 'guru_budi',
+        'password' => bcrypt('rahasia123'),
+    ]);
+
+    $response = $this->post(route('login.store'), [
+        'email' => 'guru_budi',
+        'password' => 'rahasia123',
+    ]);
+
+    $this->assertAuthenticatedAs($user);
+    $response->assertRedirect(route('dashboard', absolute: false));
+});
+
+test('registration is disabled and redirects to login', function () {
+    $response = $this->get('/register');
+
+    $response->assertRedirect('/login');
+});
+
 test('users are rate limited', function () {
     $user = User::factory()->create();
 

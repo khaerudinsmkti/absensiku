@@ -95,6 +95,23 @@ interface ParsedStudentRow {
     [key: string]: any;
 }
 
+interface ParsedTeacherRow {
+    name: string;
+    nip?: string;
+    email?: string;
+    username?: string;
+    role?: string;
+    password?: string;
+    [key: string]: any;
+}
+
+interface ParsedClassroomRow {
+    name: string;
+    academic_year?: string;
+    homeroom_teacher?: string;
+    [key: string]: any;
+}
+
 export default function MasterIndexPage({
     classrooms = [],
     selectedClassroomId,
@@ -119,8 +136,20 @@ export default function MasterIndexPage({
     const [showTeacherModal, setShowTeacherModal] = useState(false);
     const [editingTeacher, setEditingTeacher] = useState<TeacherItem | null>(null);
 
+    // Teacher Import States
+    const [showTeacherImportModal, setShowTeacherImportModal] = useState(false);
+    const [teacherImportTab, setTeacherImportTab] = useState<'excel' | 'paste'>('excel');
+    const [teacherPasteText, setTeacherPasteText] = useState('');
+    const [parsedTeacherData, setParsedTeacherData] = useState<ParsedTeacherRow[]>([]);
+
     const [editingClass, setEditingClass] = useState<ClassroomItem | null>(null);
     const [editingDuty, setEditingDuty] = useState<DutyScheduleItem | null>(null);
+
+    // Classroom Import States
+    const [showClassImportModal, setShowClassImportModal] = useState(false);
+    const [classImportTab, setClassImportTab] = useState<'excel' | 'paste'>('excel');
+    const [classPasteText, setClassPasteText] = useState('');
+    const [parsedClassData, setParsedClassData] = useState<ParsedClassroomRow[]>([]);
 
     // Student Single Form
     const studentForm = useForm({
@@ -446,6 +475,164 @@ export default function MasterIndexPage({
         }
     };
 
+    // -------------------------------------------------------------
+    // TEACHER EXCEL & COPY PASTE IMPORT
+    // -------------------------------------------------------------
+    const parseTeacherExcelFile = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (json.length === 0) return;
+
+                const rows: ParsedTeacherRow[] = [];
+                const startIndex = typeof json[0][0] === 'string' && isNaN(Number(json[0][0])) ? 1 : 0;
+
+                for (let i = startIndex; i < json.length; i++) {
+                    const row = json[i];
+                    if (!row || row.length === 0) continue;
+
+                    const cells = row.map((c: any) => (c !== undefined && c !== null ? String(c).trim() : ''));
+                    if (cells.every((c: string) => !c)) continue;
+
+                    const isFirstNumber = !isNaN(Number(cells[0])) && cells[0].length <= 3 && cells[1];
+                    const offset = isFirstNumber ? 1 : 0;
+
+                    let name = cells[offset] || '';
+                    let nip = cells[offset + 1] || '';
+                    let email = cells[offset + 2] || '';
+                    let username = cells[offset + 3] || '';
+                    let role = cells[offset + 4] || 'Guru';
+                    let password = cells[offset + 5] || '123456';
+
+                    if (!isNaN(Number(name)) && name.length >= 8 && isNaN(Number(nip))) {
+                        const temp = name;
+                        name = nip;
+                        nip = temp;
+                    }
+
+                    if (name) {
+                        rows.push({
+                            name,
+                            nip: nip || undefined,
+                            email: email || undefined,
+                            username: username || undefined,
+                            role: role || 'Guru',
+                            password: password || '123456',
+                        });
+                    }
+                }
+
+                setParsedTeacherData(rows);
+                if (rows.length === 0) {
+                    toast.warning('Tidak ditemukan baris data guru yang valid pada berkas Excel.');
+                } else {
+                    toast.success(`${rows.length} baris data guru berhasil dibaca dari berkas.`);
+                }
+            } catch (err) {
+                toast.error('Gagal membaca file Excel. Pastikan format file adalah .xlsx, .xls, atau .csv');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    const handleTeacherPasteProcess = () => {
+        if (!teacherPasteText.trim()) {
+            toast.error('Silakan tempel teks tabel Excel terlebih dahulu pada kolom yang disediakan.');
+            return;
+        }
+
+        const lines = teacherPasteText.split(/\r?\n/);
+        const rows: ParsedTeacherRow[] = [];
+
+        lines.forEach((line) => {
+            if (!line.trim()) return;
+            const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+            const cells = parts.map((p) => p.trim());
+
+            if (cells.some((c) => c.toLowerCase() === 'nama' || c.toLowerCase() === 'nip')) {
+                return;
+            }
+
+            const isFirstNumber = !isNaN(Number(cells[0])) && cells[0].length <= 3 && cells[1];
+            const offset = isFirstNumber ? 1 : 0;
+
+            let name = cells[offset] || '';
+            let nip = cells[offset + 1] || '';
+            let email = cells[offset + 2] || '';
+            let username = cells[offset + 3] || '';
+            let role = cells[offset + 4] || 'Guru';
+            let password = cells[offset + 5] || '123456';
+
+            if (!isNaN(Number(name)) && name.length >= 8 && isNaN(Number(nip))) {
+                const temp = name;
+                name = nip;
+                nip = temp;
+            }
+
+            if (name) {
+                rows.push({
+                    name,
+                    nip: nip || undefined,
+                    email: email || undefined,
+                    username: username || undefined,
+                    role: role || 'Guru',
+                    password: password || '123456',
+                });
+            }
+        });
+
+        setParsedTeacherData(rows);
+        if (rows.length === 0) {
+            toast.warning('Tidak ada baris data guru yang valid ditemukan dari teks yang ditempel.');
+        } else {
+            toast.success(`${rows.length} baris data guru berhasil dibaca dari clipboard.`);
+        }
+    };
+
+    const handleExecuteTeacherImport = () => {
+        if (parsedTeacherData.length === 0) {
+            toast.error('Tidak ada data guru yang valid untuk diimpor.');
+            return;
+        }
+
+        router.post(
+            '/master/teachers/batch-import',
+            {
+                teachers: parsedTeacherData,
+            },
+            {
+                onSuccess: () => {
+                    setShowTeacherImportModal(false);
+                    setParsedTeacherData([]);
+                    setTeacherPasteText('');
+                },
+                onError: (errs) => {
+                    const firstErr = Object.values(errs)[0];
+                    toast.error(typeof firstErr === 'string' ? firstErr : 'Gagal mengimpor data guru.');
+                },
+            },
+        );
+    };
+
+    const downloadTeacherTemplate = () => {
+        const templateData = [
+            ['Nama Guru & Staf', 'NIP', 'Email (Opsional)', 'Username (Opsional)', 'Peran (Guru/Admin/Kepsek)', 'Password (Opsional)'],
+            ['Budi Santoso, S.Pd', '198501012010011001', 'budi@sekolah.id', 'budi85', 'Guru', '123456'],
+            ['Siti Aminah, M.Pd', '198702022011022002', 'siti@sekolah.id', 'siti87', 'Guru', '123456'],
+            ['Drs. Hendro Wibowo', '197505051999031003', 'hendro@sekolah.id', 'hendro75', 'Kepala Sekolah', '123456'],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(templateData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Template Guru');
+        XLSX.writeFile(wb, 'Format_Import_Data_Guru.xlsx');
+    };
+
     // Classroom & Duty Handlers
     const openEditClass = (c: ClassroomItem) => {
         setEditingClass(c);
@@ -494,6 +681,141 @@ export default function MasterIndexPage({
                 },
             });
         }
+    };
+
+    // -------------------------------------------------------------
+    // CLASSROOM EXCEL & COPY PASTE IMPORT
+    // -------------------------------------------------------------
+    const parseClassExcelFile = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const json: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                if (json.length === 0) return;
+
+                const rows: ParsedClassroomRow[] = [];
+                const startIndex = typeof json[0][0] === 'string' && (json[0][0].toLowerCase().includes('kelas') || json[0][0].toLowerCase().includes('nama') || json[0][0].toLowerCase().includes('no')) ? 1 : 0;
+
+                for (let i = startIndex; i < json.length; i++) {
+                    const row = json[i];
+                    if (!row || row.length === 0) continue;
+
+                    const cells = row.map((c: any) => (c !== undefined && c !== null ? String(c).trim() : ''));
+                    if (cells.every((c: string) => !c)) continue;
+
+                    const isFirstNumber = !isNaN(Number(cells[0])) && cells[0].length <= 3 && cells[1];
+                    const offset = isFirstNumber ? 1 : 0;
+
+                    const name = cells[offset] || '';
+                    const academic_year = cells[offset + 1] || '2026/2027';
+                    const homeroom_teacher = cells[offset + 2] || '';
+
+                    if (name) {
+                        rows.push({
+                            name,
+                            academic_year: academic_year || '2026/2027',
+                            homeroom_teacher: homeroom_teacher || undefined,
+                        });
+                    }
+                }
+
+                setParsedClassData(rows);
+                if (rows.length === 0) {
+                    toast.warning('Tidak ditemukan baris data rombel kelas yang valid pada berkas Excel.');
+                } else {
+                    toast.success(`${rows.length} baris data rombel kelas berhasil dibaca dari berkas.`);
+                }
+            } catch (err) {
+                toast.error('Gagal membaca file Excel. Pastikan format file adalah .xlsx, .xls, atau .csv');
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
+    const handleClassPasteProcess = () => {
+        if (!classPasteText.trim()) {
+            toast.error('Silakan tempel teks tabel Excel terlebih dahulu pada kolom yang disediakan.');
+            return;
+        }
+
+        const lines = classPasteText.split(/\r?\n/);
+        const rows: ParsedClassroomRow[] = [];
+
+        lines.forEach((line) => {
+            if (!line.trim()) return;
+            const parts = line.includes('\t') ? line.split('\t') : line.split(',');
+            const cells = parts.map((p) => p.trim());
+
+            if (cells.some((c) => c.toLowerCase() === 'kelas' || c.toLowerCase() === 'nama kelas' || c.toLowerCase() === 'rombel')) {
+                return;
+            }
+
+            const isFirstNumber = !isNaN(Number(cells[0])) && cells[0].length <= 3 && cells[1];
+            const offset = isFirstNumber ? 1 : 0;
+
+            const name = cells[offset] || '';
+            const academic_year = cells[offset + 1] || '2026/2027';
+            const homeroom_teacher = cells[offset + 2] || '';
+
+            if (name) {
+                rows.push({
+                    name,
+                    academic_year: academic_year || '2026/2027',
+                    homeroom_teacher: homeroom_teacher || undefined,
+                });
+            }
+        });
+
+        setParsedClassData(rows);
+        if (rows.length === 0) {
+            toast.warning('Tidak ada baris data rombel kelas yang valid ditemukan dari teks yang ditempel.');
+        } else {
+            toast.success(`${rows.length} baris data rombel kelas berhasil dibaca dari clipboard.`);
+        }
+    };
+
+    const handleExecuteClassImport = () => {
+        if (parsedClassData.length === 0) {
+            toast.error('Tidak ada data rombel kelas yang valid untuk diimpor.');
+            return;
+        }
+
+        router.post(
+            '/master/classrooms/batch-import',
+            {
+                classrooms: parsedClassData,
+            },
+            {
+                onSuccess: () => {
+                    setShowClassImportModal(false);
+                    setParsedClassData([]);
+                    setClassPasteText('');
+                },
+                onError: (errs) => {
+                    const firstErr = Object.values(errs)[0];
+                    toast.error(typeof firstErr === 'string' ? firstErr : 'Gagal mengimpor data rombel kelas.');
+                },
+            },
+        );
+    };
+
+    const downloadClassTemplate = () => {
+        const templateData = [
+            ['Nama Rombel / Kelas', 'Tahun Ajaran', 'Wali Kelas (Nama / NIP - Opsional)'],
+            ['Kelas 1-A', '2026/2027', 'Budi Santoso, S.Pd'],
+            ['Kelas 1-B', '2026/2027', 'Siti Aminah, M.Pd'],
+            ['Kelas 2-A', '2026/2027', ''],
+            ['Kelas 2-B', '2026/2027', ''],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(templateData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Template Rombel');
+        XLSX.writeFile(wb, 'Format_Import_Data_Rombel.xlsx');
     };
 
     const openEditDuty = (ds: DutyScheduleItem) => {
@@ -802,15 +1124,26 @@ export default function MasterIndexPage({
                                     Kelola akun guru, wali kelas, guru piket, dan hak akses login sistem.
                                 </p>
                             </div>
-                            <Button
-                                type="button"
-                                variant="primary"
-                                onClick={openCreateTeacher}
-                                className="font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
-                            >
-                                <Plus className="size-4 mr-1" />
-                                Tambah Guru Baru
-                            </Button>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => setShowTeacherImportModal(true)}
+                                    className="font-bold text-xs bg-[#E8FAF9] text-[#0D9488] hover:bg-[#CCFBF1] border border-[#0D9488]/30 shadow-sm"
+                                >
+                                    <FileSpreadsheet className="size-4 mr-1.5" />
+                                    Import Excel / Copy-Paste
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    onClick={openCreateTeacher}
+                                    className="font-bold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand hover:translate-y-[-1px] transition-all"
+                                >
+                                    <Plus className="size-4 mr-1" />
+                                    Tambah Guru Baru
+                                </Button>
+                            </div>
                         </div>
 
                         <div className="overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
@@ -999,9 +1332,20 @@ export default function MasterIndexPage({
                         </div>
 
                         <div className="lg:col-span-2 overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
-                            <div className="border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A]">
-                                <h3 className="text-base font-bold text-[#111827] dark:text-white">Daftar Rombel / Kelas Aktif</h3>
-                                <p className="text-xs text-gray-500">Kelola rombel kelas beserta penetapan wali kelas yang bertanggung jawab.</p>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A] gap-3">
+                                <div>
+                                    <h3 className="text-base font-bold text-[#111827] dark:text-white">Daftar Rombel / Kelas Aktif</h3>
+                                    <p className="text-xs text-gray-500">Kelola rombel kelas beserta penetapan wali kelas yang bertanggung jawab.</p>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    onClick={() => setShowClassImportModal(true)}
+                                    className="font-bold text-xs bg-[#E8FAF9] text-[#0D9488] hover:bg-[#CCFBF1] border border-[#0D9488]/30 shadow-sm shrink-0"
+                                >
+                                    <FileSpreadsheet className="size-4 mr-1.5" />
+                                    Import Excel / Copy-Paste
+                                </Button>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse text-left text-sm">
@@ -1707,6 +2051,414 @@ export default function MasterIndexPage({
                                     </Button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* MODAL 4: IMPORT DATA GURU & STAF (EXCEL / COPY PASTE)      */}
+                {/* ========================================================= */}
+                {showTeacherImportModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+                        <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[22px] bg-white p-6 shadow-2xl dark:bg-[#18122B] animate-in fade-in zoom-in-95">
+                            <div className="flex items-center justify-between border-b pb-3 mb-4 shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="rounded-xl bg-[#FFF0EB] p-2 text-[#FF6B35]">
+                                        <FileSpreadsheet className="size-5" />
+                                    </div>
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                                        Import Data Guru & Staf Massal
+                                    </h3>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowTeacherImportModal(false);
+                                        setParsedTeacherData([]);
+                                    }}
+                                    className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+                                >
+                                    <X className="size-5" />
+                                </button>
+                            </div>
+
+                            <div className="overflow-y-auto flex-1 pr-1 flex flex-col gap-4">
+                                {/* Format guidance & Template download */}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-xl bg-orange-50 border border-orange-200 p-3.5 text-xs text-orange-950 gap-2">
+                                    <div className="flex items-start gap-2">
+                                        <HelpCircle className="size-4 text-[#FF6B35] mt-0.5 shrink-0" />
+                                        <div>
+                                            <span className="font-bold">Format Kolom Excel:</span> [Nama Lengkap] [NIP (Opsional)] [Email (Opsional)] [Username (Opsional)] [Peran (Opsional)] [Password (Opsional)]
+                                            <p className="text-[11px] text-orange-800 mt-0.5">
+                                                Jika username/email/password tidak diisi, sistem otomatis membuatkannya berdasarkan NIP atau nama (Password default: 123456).
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={downloadTeacherTemplate}
+                                        className="shrink-0 font-bold text-xs text-[#FF6B35] border border-[#FF6B35]/40 hover:bg-orange-100"
+                                    >
+                                        <Download className="size-3.5 mr-1" />
+                                        Unduh Template Excel
+                                    </Button>
+                                </div>
+
+                                {/* Import Tabs: Upload File vs Copy Paste */}
+                                <div className="flex items-center gap-2 border-b">
+                                    <button
+                                        type="button"
+                                        onClick={() => setTeacherImportTab('excel')}
+                                        className={`pb-2 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                                            teacherImportTab === 'excel'
+                                                ? 'border-[#FF6B35] text-[#FF6B35]'
+                                                : 'border-transparent text-gray-400'
+                                        }`}
+                                    >
+                                        <Upload className="size-3.5" />
+                                        Upload File Excel (.xlsx / .csv)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setTeacherImportTab('paste')}
+                                        className={`pb-2 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                                            teacherImportTab === 'paste'
+                                                ? 'border-[#FF6B35] text-[#FF6B35]'
+                                                : 'border-transparent text-gray-400'
+                                        }`}
+                                    >
+                                        <ClipboardPaste className="size-3.5" />
+                                        Copy-Paste Langsung dari Excel
+                                    </button>
+                                </div>
+
+                                {/* Option 1: File Upload */}
+                                {teacherImportTab === 'excel' && (
+                                    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#FF6B35]/40 bg-[#FFF0EB]/30 p-8 text-center">
+                                        <FileSpreadsheet className="size-10 text-[#FF6B35] mb-2" />
+                                        <div className="text-xs font-bold text-gray-800">
+                                            Pilih atau tarik file Excel / CSV ke sini
+                                        </div>
+                                        <p className="text-[11px] text-gray-500 mt-1 mb-3">
+                                            Mendukung ekstensi .xlsx, .xls, dan .csv
+                                        </p>
+                                        <label className="cursor-pointer">
+                                            <input
+                                                type="file"
+                                                accept=".xlsx, .xls, .csv"
+                                                onChange={(e) => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                        parseTeacherExcelFile(e.target.files[0]);
+                                                    }
+                                                }}
+                                                className="hidden"
+                                            />
+                                            <span className="rounded-xl bg-[#FF6B35] px-4 py-2 text-xs font-bold text-white shadow-brand hover:bg-[#E55A25]">
+                                                Pilih File dari Komputer
+                                            </span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                {/* Option 2: Copy-Paste Box */}
+                                {teacherImportTab === 'paste' && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-xs font-bold text-gray-600">
+                                            Paste Baris Tabel dari Excel di Sini (Ctrl+V):
+                                        </label>
+                                        <textarea
+                                            rows={5}
+                                            value={teacherPasteText}
+                                            onChange={(e) => setTeacherPasteText(e.target.value)}
+                                            placeholder={`Contoh copy-paste dari Excel:\nBudi Santoso, S.Pd\t198501012010011001\tbudi@sekolah.id\tbudi85\tGuru\t123456\nSiti Aminah, M.Pd\t198702022011022002\tsiti@sekolah.id\tsiti87\tGuru\t123456`}
+                                            className="w-full rounded-xl border-2 border-gray-200 p-3 font-mono text-xs focus:border-[#FF6B35] outline-none"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={handleTeacherPasteProcess}
+                                            className="self-end text-xs font-bold bg-[#FF6B35] text-white hover:bg-[#E55A25]"
+                                        >
+                                            Proses Teks Paste
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {/* Live Preview Table */}
+                                {parsedTeacherData.length > 0 && (
+                                    <div className="flex flex-col gap-2 mt-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-gray-800">
+                                                Pratinjau Hasil Parsing ({parsedTeacherData.length} baris guru siap disimpan):
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setParsedTeacherData([])}
+                                                className="text-[11px] text-red-500 font-bold hover:underline"
+                                            >
+                                                Hapus / Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="overflow-x-auto max-h-48 rounded-xl border border-gray-200">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="bg-gray-50 border-b font-bold text-gray-600 sticky top-0">
+                                                    <tr>
+                                                        <th className="p-2.5">No</th>
+                                                        <th className="p-2.5">Nama Guru</th>
+                                                        <th className="p-2.5">NIP</th>
+                                                        <th className="p-2.5">Email</th>
+                                                        <th className="p-2.5">Username</th>
+                                                        <th className="p-2.5">Peran</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {parsedTeacherData.map((row, i) => (
+                                                        <tr key={i} className="hover:bg-gray-50/50">
+                                                            <td className="p-2 text-gray-400 font-bold">{i + 1}</td>
+                                                            <td className="p-2 font-semibold text-gray-900">{row.name}</td>
+                                                            <td className="p-2 font-mono text-gray-600">{row.nip || '-'}</td>
+                                                            <td className="p-2 text-gray-600">{row.email || '(Otomatis)'}</td>
+                                                            <td className="p-2 font-mono text-gray-600">{row.username || '(Otomatis)'}</td>
+                                                            <td className="p-2 font-medium text-teal-700">{row.role || 'Guru'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t mt-4 shrink-0">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setShowTeacherImportModal(false);
+                                        setParsedTeacherData([]);
+                                    }}
+                                >
+                                    Batal
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={parsedTeacherData.length === 0}
+                                    onClick={handleExecuteTeacherImport}
+                                    className="bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand font-bold"
+                                >
+                                    <CheckCircle2 className="size-4 mr-1.5" />
+                                    Simpan {parsedTeacherData.length} Data Guru
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* ========================================================= */}
+                {/* MODAL 5: IMPORT DATA ROMBEL KELAS (EXCEL / COPY PASTE)     */}
+                {/* ========================================================= */}
+                {showClassImportModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+                        <div className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[22px] bg-white p-6 shadow-2xl dark:bg-[#18122B] animate-in fade-in zoom-in-95">
+                            <div className="flex items-center justify-between border-b pb-3 mb-4 shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="rounded-xl bg-[#FFF0EB] p-2 text-[#FF6B35]">
+                                        <FileSpreadsheet className="size-5" />
+                                    </div>
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                                        Import Data Rombel Kelas Massal
+                                    </h3>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowClassImportModal(false);
+                                        setParsedClassData([]);
+                                    }}
+                                    className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
+                                >
+                                    <X className="size-5" />
+                                </button>
+                            </div>
+
+                            <div className="overflow-y-auto flex-1 pr-1 flex flex-col gap-4">
+                                {/* Format guidance & Template download */}
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between rounded-xl bg-orange-50 border border-orange-200 p-3.5 text-xs text-orange-950 gap-2">
+                                    <div className="flex items-start gap-2">
+                                        <HelpCircle className="size-4 text-[#FF6B35] mt-0.5 shrink-0" />
+                                        <div>
+                                            <span className="font-bold">Format Kolom Excel:</span> [Nama Rombel / Kelas] [Tahun Ajaran (Opsional)] [Wali Kelas (Nama / NIP - Opsional)]
+                                            <p className="text-[11px] text-orange-800 mt-0.5">
+                                                Jika tahun ajaran kosong, otomatis diisi "2026/2027". Wali kelas akan dicocokkan dengan data guru yang ada.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={downloadClassTemplate}
+                                        className="shrink-0 font-bold text-xs text-[#FF6B35] border border-[#FF6B35]/40 hover:bg-orange-100"
+                                    >
+                                        <Download className="size-3.5 mr-1" />
+                                        Unduh Template Excel
+                                    </Button>
+                                </div>
+
+                                {/* Import Tabs: Upload File vs Copy Paste */}
+                                <div className="flex items-center gap-2 border-b">
+                                    <button
+                                        type="button"
+                                        onClick={() => setClassImportTab('excel')}
+                                        className={`pb-2 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                                            classImportTab === 'excel'
+                                                ? 'border-[#FF6B35] text-[#FF6B35]'
+                                                : 'border-transparent text-gray-400'
+                                        }`}
+                                    >
+                                        <Upload className="size-3.5" />
+                                        Upload File Excel (.xlsx / .csv)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setClassImportTab('paste')}
+                                        className={`pb-2 px-3 text-xs font-bold border-b-2 transition-all flex items-center gap-1.5 ${
+                                            classImportTab === 'paste'
+                                                ? 'border-[#FF6B35] text-[#FF6B35]'
+                                                : 'border-transparent text-gray-400'
+                                        }`}
+                                    >
+                                        <ClipboardPaste className="size-3.5" />
+                                        Copy-Paste Langsung dari Excel
+                                    </button>
+                                </div>
+
+                                {/* Option 1: File Upload */}
+                                {classImportTab === 'excel' && (
+                                    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#FF6B35]/40 bg-[#FFF0EB]/30 p-8 text-center">
+                                        <FileSpreadsheet className="size-10 text-[#FF6B35] mb-2" />
+                                        <div className="text-xs font-bold text-gray-800">
+                                            Pilih atau tarik file Excel / CSV ke sini
+                                        </div>
+                                        <p className="text-[11px] text-gray-500 mt-1 mb-3">
+                                            Mendukung ekstensi .xlsx, .xls, dan .csv
+                                        </p>
+                                        <label className="cursor-pointer">
+                                            <input
+                                                type="file"
+                                                accept=".xlsx, .xls, .csv"
+                                                onChange={(e) => {
+                                                    if (e.target.files && e.target.files[0]) {
+                                                        parseClassExcelFile(e.target.files[0]);
+                                                    }
+                                                }}
+                                                className="hidden"
+                                            />
+                                            <span className="rounded-xl bg-[#FF6B35] px-4 py-2 text-xs font-bold text-white shadow-brand hover:bg-[#E55A25]">
+                                                Pilih File dari Komputer
+                                            </span>
+                                        </label>
+                                    </div>
+                                )}
+
+                                {/* Option 2: Copy-Paste Box */}
+                                {classImportTab === 'paste' && (
+                                    <div className="flex flex-col gap-2">
+                                        <label className="text-xs font-bold text-gray-600">
+                                            Paste Baris Tabel dari Excel di Sini (Ctrl+V):
+                                        </label>
+                                        <textarea
+                                            rows={5}
+                                            value={classPasteText}
+                                            onChange={(e) => setClassPasteText(e.target.value)}
+                                            placeholder={`Contoh copy-paste dari Excel:\nKelas 1-A\t2026/2027\tBudi Santoso, S.Pd\nKelas 1-B\t2026/2027\tSiti Aminah, M.Pd\nKelas 2-A\t2026/2027\t`}
+                                            className="w-full rounded-xl border-2 border-gray-200 p-3 font-mono text-xs focus:border-[#FF6B35] outline-none"
+                                        />
+                                        <Button
+                                            type="button"
+                                            variant="secondary"
+                                            size="sm"
+                                            onClick={handleClassPasteProcess}
+                                            className="self-end text-xs font-bold bg-[#FF6B35] text-white hover:bg-[#E55A25]"
+                                        >
+                                            Proses Teks Paste
+                                        </Button>
+                                    </div>
+                                )}
+
+                                {/* Live Preview Table */}
+                                {parsedClassData.length > 0 && (
+                                    <div className="flex flex-col gap-2 mt-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-gray-800">
+                                                Pratinjau Hasil Parsing ({parsedClassData.length} baris kelas siap disimpan):
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setParsedClassData([])}
+                                                className="text-[11px] text-red-500 font-bold hover:underline"
+                                            >
+                                                Hapus / Reset
+                                            </button>
+                                        </div>
+
+                                        <div className="overflow-x-auto max-h-48 rounded-xl border border-gray-200">
+                                            <table className="w-full text-left text-xs">
+                                                <thead className="bg-gray-50 border-b font-bold text-gray-600 sticky top-0">
+                                                    <tr>
+                                                        <th className="p-2.5">No</th>
+                                                        <th className="p-2.5">Nama Kelas / Rombel</th>
+                                                        <th className="p-2.5">Tahun Ajaran</th>
+                                                        <th className="p-2.5">Wali Kelas</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {parsedClassData.map((row, i) => (
+                                                        <tr key={i} className="hover:bg-gray-50/50">
+                                                            <td className="p-2 text-gray-400 font-bold">{i + 1}</td>
+                                                            <td className="p-2 font-bold text-gray-900">{row.name}</td>
+                                                            <td className="p-2 font-semibold text-gray-600">{row.academic_year || '2026/2027'}</td>
+                                                            <td className="p-2 text-teal-700 font-medium">{row.homeroom_teacher || '(Belum Ditentukan)'}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t mt-4 shrink-0">
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => {
+                                        setShowClassImportModal(false);
+                                        setParsedClassData([]);
+                                    }}
+                                >
+                                    Batal
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant="primary"
+                                    size="sm"
+                                    disabled={parsedClassData.length === 0}
+                                    onClick={handleExecuteClassImport}
+                                    className="bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand font-bold"
+                                >
+                                    <CheckCircle2 className="size-4 mr-1.5" />
+                                    Simpan {parsedClassData.length} Data Rombel
+                                </Button>
+                            </div>
                         </div>
                     </div>
                 )}

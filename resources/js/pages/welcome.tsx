@@ -8,27 +8,42 @@ import {
 } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
-import { dashboard, login, register } from '@/routes';
+import { dashboard, login } from '@/routes';
+
+interface SchoolProp {
+    name?: string;
+    logo_url?: string | null;
+}
 
 export default function Welcome() {
-    const { auth } = usePage().props;
+    const { auth, school } = usePage<{ auth: any; school?: SchoolProp }>().props;
+    const schoolName = school?.name || 'AbsensiKu SD';
+    const logoUrl = school?.logo_url;
 
     return (
         <>
-            <Head title="AbsensiKu SD - Sistem Presensi Siswa Digital" />
+            <Head title={`${schoolName} - Sistem Presensi Siswa Digital`} />
             <div className="flex min-h-screen flex-col bg-page-gradient text-[#1F2937] dark:text-neutral-100">
                 {/* Navbar */}
                 <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b border-[#E8E8E8] bg-white/80 px-6 backdrop-blur-md lg:px-12 dark:border-[#2D234A] dark:bg-[#18122B]/80">
                     <div className="flex items-center gap-3">
-                        <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#FF6B35] to-[#FFE66D] text-white shadow-md shadow-[#FF6B35]/25">
-                            <AppLogoIcon className="size-6 text-white" />
-                        </div>
+                        {logoUrl ? (
+                            <img
+                                src={logoUrl}
+                                alt={schoolName}
+                                className="size-10 object-contain rounded-xl bg-white p-1 shadow-md border border-[#E8E8E8] dark:border-[#2D234A]"
+                            />
+                        ) : (
+                            <div className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-tr from-[#FF6B35] to-[#FFE66D] text-white shadow-md shadow-[#FF6B35]/25">
+                                <AppLogoIcon className="size-6 text-white" />
+                            </div>
+                        )}
                         <div>
                             <span className="text-lg font-black tracking-tight text-[#111827] dark:text-white leading-tight">
-                                AbsensiKu
+                                {schoolName}
                             </span>
                             <span className="ml-1.5 rounded bg-[#FFF0EB] px-1.5 py-0.5 text-[10px] font-bold text-[#FF6B35] dark:bg-[#3D1A10]">
-                                SD DIGITAL
+                                PRESENSI DIGITAL
                             </span>
                         </div>
                     </div>
@@ -42,14 +57,9 @@ export default function Welcome() {
                                 </Link>
                             </Button>
                         ) : (
-                            <>
-                                <Button asChild variant="ghost" size="sm">
-                                    <Link href={login()}>Masuk</Link>
-                                </Button>
-                                <Button asChild variant="primary" size="sm">
-                                    <Link href={register()}>Daftar Akun</Link>
-                                </Button>
-                            </>
+                            <Button asChild variant="primary" size="sm">
+                                <Link href={login()}>Masuk ke Sistem</Link>
+                            </Button>
                         )}
                     </nav>
                 </header>
@@ -87,17 +97,12 @@ export default function Welcome() {
                                         </Link>
                                     </Button>
                                 ) : (
-                                    <>
-                                        <Button asChild size="lg" variant="primary">
-                                            <Link href={login()}>
-                                                Mulai Presensi Sekarang
-                                                <ArrowRight className="size-5" />
-                                            </Link>
-                                        </Button>
-                                        <Button asChild size="lg" variant="ghost">
-                                            <Link href={register()}>Registrasi Guru Baru</Link>
-                                        </Button>
-                                    </>
+                                    <Button asChild size="lg" variant="primary">
+                                        <Link href={login()}>
+                                            Masuk ke Portal Presensi
+                                            <ArrowRight className="size-5" />
+                                        </Link>
+                                    </Button>
                                 )}
                             </div>
                         </div>
@@ -148,12 +153,12 @@ export default function Welcome() {
                     <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 sm:flex-row">
                         <div className="flex items-center gap-2">
                             <span className="font-bold text-[#111827] dark:text-white">
-                                AbsensiKu SD
+                                {schoolName}
                             </span>
-                            <span>— Sistem Absensi Siswa Digital</span>
+                            <span>— Sistem Presensi Siswa Digital</span>
                         </div>
                         <div>
-                            &copy; {new Date().getFullYear()} AbsensiKu. All rights reserved.
+                            &copy; {new Date().getFullYear()} {schoolName}. All rights reserved.
                         </div>
                     </div>
                 </footer>

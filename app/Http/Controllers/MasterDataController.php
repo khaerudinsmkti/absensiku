@@ -10,6 +10,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -121,6 +122,64 @@ class MasterDataController extends Controller
         $classroom->delete();
 
         return back()->with('success', "Kelas {$name} berhasil dihapus.");
+    }
+
+    /**
+     * Batch import classrooms from Excel file or direct copy-paste payload
+     */
+    public function batchImportClassrooms(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'classrooms' => 'required|array|min:1',
+            'classrooms.*.name' => 'required|string|max:50',
+            'classrooms.*.academic_year' => 'nullable|string|max:20',
+            'classrooms.*.homeroom_teacher' => 'nullable|string|max:150',
+        ]);
+
+        $count = 0;
+
+        DB::transaction(function () use ($validated, &$count) {
+            $defaultYear = '2026/2027';
+            $teachers = User::whereIn('role', ['teacher', 'admin', 'principal'])->get();
+
+            foreach ($validated['classrooms'] as $item) {
+                $name = trim($item['name']);
+                if (empty($name)) {
+                    continue;
+                }
+
+                $academicYear = ! empty($item['academic_year']) ? trim($item['academic_year']) : $defaultYear;
+                $teacherIdentifier = ! empty($item['homeroom_teacher']) ? trim($item['homeroom_teacher']) : null;
+
+                $homeroomTeacherId = null;
+                if ($teacherIdentifier) {
+                    $matchedTeacher = $teachers->first(fn ($t) => $t->nip && $t->nip === $teacherIdentifier);
+                    if (! $matchedTeacher) {
+                        $matchedTeacher = $teachers->first(fn ($t) => strcasecmp($t->name, $teacherIdentifier) === 0);
+                    }
+                    if (! $matchedTeacher) {
+                        $matchedTeacher = $teachers->first(fn ($t) => stripos($t->name, $teacherIdentifier) !== false);
+                    }
+                    if ($matchedTeacher) {
+                        $homeroomTeacherId = $matchedTeacher->id;
+                    }
+                }
+
+                Classroom::updateOrCreate(
+                    [
+                        'name' => $name,
+                        'academic_year' => $academicYear,
+                    ],
+                    [
+                        'homeroom_teacher_id' => $homeroomTeacherId,
+                    ]
+                );
+
+                $count++;
+            }
+        });
+
+        return back()->with('success', "{$count} data rombel kelas berhasil diimpor ke sistem.");
     }
 
     /**
@@ -312,6 +371,123 @@ class MasterDataController extends Controller
         $user->delete();
 
         return back()->with('success', "Data guru {$name} berhasil dihapus.");
+    }
+
+    /**
+     * Batch import teachers from Excel file or direct copy-paste payload
+     */
+    public function batchImportTeachers(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'teachers' => 'required|array|min:1',
+            'teachers.*.name' => 'required|string|max:150',
+            'teachers.*.nip' => 'nullable|string|max:50',
+            'teachers.*.username' => 'nullable|string|max:50',
+            'teachers.*.email' => 'nullable|string|max:150',
+            'teachers.*.role' => 'nullable|string|max:20',
+            'teachers.*.password' => 'nullable|string|min:4',
+        ]);
+
+        $count = 0;
+
+        DB::transaction(function () use ($validated, &$count) {
+            foreach ($validated['teachers'] as $item) {
+                $name = trim($item['name']);
+                if (empty($name)) {
+                    continue;
+                }
+
+                $nip = ! empty($item['nip']) ? trim($item['nip']) : null;
+
+                // Determine or generate username
+                $username = ! empty($item['username']) ? trim($item['username']) : null;
+                if (! $username) {
+                    if ($nip) {
+                        $username = $nip;
+                    } else {
+                        $baseUsername = Str::slug($name, '');
+                        if (empty($baseUsername)) {
+                            $baseUsername = 'guru';
+                        }
+                        $username = substr($baseUsername, 0, 20);
+                    }
+                }
+
+                // Determine or generate email
+                $email = ! empty($item['email']) ? trim($item['email']) : null;
+                if (! $email || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $emailUser = $nip ?: $username;
+                    $email = strtolower($emailUser) . '@sekolah.id';
+                }
+
+                // Parse role
+                $rawRole = strtolower(trim($item['role'] ?? 'teacher'));
+                $role = match ($rawRole) {
+                    'admin', 'administrator' => 'admin',
+                    'principal', 'kepala sekolah', 'kepsek' => 'principal',
+                    default => 'teacher',
+                };
+
+                $password = ! empty($item['password']) ? trim($item['password']) : '123456';
+
+                // Look up existing user by NIP or username or email
+                $user = null;
+                if ($nip) {
+                    $user = User::where('nip', $nip)->first();
+                }
+                if (! $user) {
+                    $user = User::where('username', $username)->first();
+                }
+                if (! $user) {
+                    $user = User::where('email', $email)->first();
+                }
+
+                if ($user) {
+                    // Update existing user
+                    $updatePayload = [
+                        'name' => $name,
+                        'role' => $role,
+                    ];
+                    if ($nip) {
+                        $updatePayload['nip'] = $nip;
+                    }
+                    if (! empty($item['password'])) {
+                        $updatePayload['password'] = Hash::make($password);
+                    }
+                    $user->update($updatePayload);
+                } else {
+                    // Ensure unique username & email if衝突
+                    $origUsername = $username;
+                    $counter = 1;
+                    while (User::where('username', $username)->exists()) {
+                        $username = $origUsername . $counter;
+                        $counter++;
+                    }
+
+                    $origEmail = $email;
+                    $counter = 1;
+                    while (User::where('email', $email)->exists()) {
+                        $parts = explode('@', $origEmail);
+                        $email = $parts[0] . $counter . '@' . ($parts[1] ?? 'sekolah.id');
+                        $counter++;
+                    }
+
+                    User::create([
+                        'name' => $name,
+                        'nip' => $nip,
+                        'username' => $username,
+                        'email' => $email,
+                        'role' => $role,
+                        'password' => Hash::make($password),
+                        'email_verified_at' => now(),
+                    ]);
+                }
+
+                $count++;
+            }
+        });
+
+        return back()->with('success', "{$count} data guru & staf berhasil diimpor ke sistem.");
     }
 
     /**

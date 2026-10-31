@@ -11,6 +11,7 @@ use App\Http\Controllers\SchoolSettingController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::redirect('/register', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // 1. Dashboard Eksekutif & Ringkasan Realtime
@@ -39,9 +40,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // 6. Master Data (Kelas, Siswa, Guru, Jadwal Piket) - Khusus Admin
     Route::middleware('role:admin')->group(function () {
         Route::get('/master', [MasterDataController::class, 'index'])->name('master.index');
+        // Kelas CRUD & Batch Import
         Route::post('/master/classrooms', [MasterDataController::class, 'storeClassroom'])->name('master.classrooms.store');
         Route::put('/master/classrooms/{classroom}', [MasterDataController::class, 'updateClassroom'])->name('master.classrooms.update');
         Route::delete('/master/classrooms/{classroom}', [MasterDataController::class, 'destroyClassroom'])->name('master.classrooms.destroy');
+        Route::post('/master/classrooms/batch-import', [MasterDataController::class, 'batchImportClassrooms'])->name('master.classrooms.batch-import');
         Route::post('/master/duty-schedules', [MasterDataController::class, 'storeDutySchedule'])->name('master.duty-schedules.store');
         Route::put('/master/duty-schedules/{dutySchedule}', [MasterDataController::class, 'updateDutySchedule'])->name('master.duty-schedules.update');
         Route::delete('/master/duty-schedules/{dutySchedule}', [MasterDataController::class, 'destroyDutySchedule'])->name('master.duty-schedules.destroy');
@@ -52,10 +55,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/master/students/{student}', [MasterDataController::class, 'destroyStudent'])->name('master.students.destroy');
         Route::post('/master/students/batch-import', [MasterDataController::class, 'batchImportStudents'])->name('master.students.batch-import');
 
-        // Guru CRUD
+        // Guru CRUD & Batch Import
         Route::post('/master/teachers', [MasterDataController::class, 'storeTeacher'])->name('master.teachers.store');
         Route::put('/master/teachers/{user}', [MasterDataController::class, 'updateTeacher'])->name('master.teachers.update');
         Route::delete('/master/teachers/{user}', [MasterDataController::class, 'destroyTeacher'])->name('master.teachers.destroy');
+        Route::post('/master/teachers/batch-import', [MasterDataController::class, 'batchImportTeachers'])->name('master.teachers.batch-import');
 
         // Pengaturan Sekolah (Identitas, Logo, Jam Masuk, Kepala Sekolah)
         Route::get('/admin/school-settings', [SchoolSettingController::class, 'edit'])->name('school-settings.edit');
