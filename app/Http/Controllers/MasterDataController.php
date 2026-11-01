@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Attendance;
+use App\Models\AttendanceAdjustment;
 use App\Models\Classroom;
 use App\Models\DutySchedule;
 use App\Models\Student;
@@ -10,6 +12,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -29,6 +32,7 @@ class MasterDataController extends Controller
         $search = $request->input('search');
 
         $studentsQuery = Student::query()
+            ->where('is_active', true)
             ->when($selectedClassroomId, fn ($q) => $q->where('classroom_id', $selectedClassroomId))
             ->when($search, function ($q) use ($search) {
                 $q->where(function ($sub) use ($search) {
@@ -41,6 +45,45 @@ class MasterDataController extends Controller
             ->orderBy('name');
 
         $students = $studentsQuery->paginate(15)->withQueryString();
+
+        // Alumni Query & Filters
+        $alumniGraduationYear = $request->input('alumni_graduation_year');
+        $alumniClassroomId = $request->input('alumni_classroom_id');
+        $alumniSearch = $request->input('alumni_search');
+
+        $alumniQuery = Student::query()
+            ->where(function ($q) {
+                $q->where('is_alumni', true)->orWhere('is_active', false);
+            })
+            ->when($alumniGraduationYear, fn ($q) => $q->where('graduation_year', $alumniGraduationYear))
+            ->when($alumniClassroomId, fn ($q) => $q->where('classroom_id', $alumniClassroomId))
+            ->when($alumniSearch, function ($q) use ($alumniSearch) {
+                $q->where(function ($sub) use ($alumniSearch) {
+                    $sub->where('name', 'like', "%{$alumniSearch}%")
+                        ->orWhere('nisn', 'like', "%{$alumniSearch}%")
+                        ->orWhere('nis', 'like', "%{$alumniSearch}%")
+                        ->orWhere('next_school', 'like', "%{$alumniSearch}%");
+                });
+            })
+            ->with('classroom')
+            ->orderByDesc('graduation_year')
+            ->orderBy('name');
+
+        $alumni = $alumniQuery->paginate(15, ['*'], 'alumni_page')->withQueryString();
+
+        $alumniYears = Student::where(function ($q) {
+                $q->where('is_alumni', true)->orWhere('is_active', false);
+            })
+            ->whereNotNull('graduation_year')
+            ->distinct()
+            ->orderByDesc('graduation_year')
+            ->pluck('graduation_year')
+            ->values();
+
+        $alumniStats = [
+            'total' => Student::where('is_alumni', true)->orWhere('is_active', false)->count(),
+            'with_next_school' => Student::where(fn ($q) => $q->where('is_alumni', true)->orWhere('is_active', false))->whereNotNull('next_school')->where('next_school', '!=', '')->count(),
+        ];
 
         $teachers = User::whereIn('role', ['teacher', 'admin', 'principal'])
             ->with(['homeroomClassrooms', 'dutySchedules'])
@@ -74,6 +117,14 @@ class MasterDataController extends Controller
             'selectedClassroomId' => $selectedClassroomId ? (int) $selectedClassroomId : null,
             'search' => $search ?? '',
             'students' => $students,
+            'alumni' => $alumni,
+            'alumniYears' => $alumniYears,
+            'alumniStats' => $alumniStats,
+            'alumniFilters' => [
+                'graduation_year' => $alumniGraduationYear,
+                'classroom_id' => $alumniClassroomId ? (int) $alumniClassroomId : null,
+                'search' => $alumniSearch ?? '',
+            ],
             'teachers' => $teachers,
             'dutySchedules' => $dutySchedules,
         ]);
@@ -494,26 +545,49 @@ class MasterDataController extends Controller
     }
 
     /**
-     * Store duty schedule
+     * Store duty schedule (supports multiple days simultaneously)
      */
     public function storeDutySchedule(Request $request): RedirectResponse
     {
         $validated = $request->validate([
             'teacher_id' => 'required|exists:users,id',
-            'day_of_week' => 'required|integer|between:1,6',
+            'days_of_week' => 'nullable|array|min:1',
+            'days_of_week.*' => 'integer|between:1,6',
+            'day_of_week' => 'nullable|integer|between:1,6',
         ]);
 
-        DutySchedule::updateOrCreate(
-            [
-                'teacher_id' => $validated['teacher_id'],
-                'day_of_week' => $validated['day_of_week'],
-            ],
-            [
-                'is_active' => true,
-            ]
-        );
+        $days = $validated['days_of_week'] ?? (isset($validated['day_of_week']) ? [(int) $validated['day_of_week']] : []);
 
-        return back()->with('success', 'Jadwal piket guru berhasil disimpan.');
+        if (empty($days)) {
+            return back()->with('error', 'Silakan pilih setidaknya 1 hari bertugas.');
+        }
+
+        $teacher = User::findOrFail($validated['teacher_id']);
+        $dayMap = [
+            1 => 'Senin',
+            2 => 'Selasa',
+            3 => 'Rabu',
+            4 => 'Kamis',
+            5 => 'Jumat',
+            6 => 'Sabtu',
+        ];
+
+        $savedDays = [];
+        foreach ($days as $day) {
+            DutySchedule::updateOrCreate(
+                [
+                    'teacher_id' => $teacher->id,
+                    'day_of_week' => $day,
+                ],
+                [
+                    'is_active' => true,
+                ]
+            );
+            $savedDays[] = $dayMap[$day] ?? "Hari {$day}";
+        }
+
+        $daysStr = implode(', ', $savedDays);
+        return back()->with('success', "Jadwal piket untuk {$teacher->name} pada hari {$daysStr} berhasil disimpan.");
     }
 
     /**
@@ -586,8 +660,11 @@ class MasterDataController extends Controller
                     }
                     $repeatedCount++;
                 } elseif ($action === 'graduate') {
+                    $sourceClass = Classroom::find($validated['source_classroom_id']);
                     $student->update([
                         'is_active' => false,
+                        'is_alumni' => true,
+                        'graduation_year' => $sourceClass?->academic_year ?? (date('Y') . '/' . (date('Y') + 1)),
                     ]);
                     $graduatedCount++;
                 }
@@ -608,5 +685,180 @@ class MasterDataController extends Controller
         $summary = count($msgParts) > 0 ? implode(', ', $msgParts) : 'Tidak ada perubahan';
 
         return back()->with('success', "Proses kenaikan kelas berhasil disimpan ({$summary}).");
+    }
+
+    /**
+     * Update alumni data (sekolah lanjutan, phone, notes, graduation year)
+     */
+    public function updateAlumni(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'graduation_year' => 'nullable|string|max:20',
+            'next_school' => 'nullable|string|max:150',
+            'alumni_phone' => 'nullable|string|max:30',
+            'alumni_notes' => 'nullable|string|max:500',
+        ]);
+
+        $student->update([
+            'graduation_year' => $validated['graduation_year'] ?? $student->graduation_year,
+            'next_school' => $validated['next_school'] ?? null,
+            'alumni_phone' => $validated['alumni_phone'] ?? null,
+            'alumni_notes' => $validated['alumni_notes'] ?? null,
+            'is_alumni' => true,
+        ]);
+
+        return back()->with('success', "Data alumni '{$student->name}' berhasil diperbarui.");
+    }
+
+    /**
+     * Restore alumni back to active student status
+     */
+    public function restoreAlumni(Request $request, Student $student): RedirectResponse
+    {
+        $validated = $request->validate([
+            'classroom_id' => 'required|exists:classrooms,id',
+        ]);
+
+        $classroom = Classroom::findOrFail($validated['classroom_id']);
+
+        $student->update([
+            'classroom_id' => $classroom->id,
+            'is_active' => true,
+            'is_alumni' => false,
+            'graduation_year' => null,
+        ]);
+
+        return back()->with('success', "Alumni '{$student->name}' berhasil dikembalikan menjadi siswa aktif di kelas {$classroom->name}.");
+    }
+
+    /**
+     * Manually graduate students to alumni
+     */
+    public function graduateStudent(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'student_ids' => 'required|array|min:1',
+            'student_ids.*' => 'required|exists:students,id',
+            'graduation_year' => 'required|string|max:20',
+            'next_school' => 'nullable|string|max:150',
+        ]);
+
+        $count = 0;
+        foreach ($validated['student_ids'] as $studentId) {
+            $student = Student::find($studentId);
+            if ($student) {
+                $student->update([
+                    'is_active' => false,
+                    'is_alumni' => true,
+                    'graduation_year' => $validated['graduation_year'],
+                    'next_school' => $validated['next_school'] ?? $student->next_school,
+                ]);
+                $count++;
+            }
+        }
+
+        return back()->with('success', "{$count} siswa berhasil ditetapkan sebagai alumni lulusan tahun {$validated['graduation_year']}.");
+    }
+
+    /**
+     * Delete alumni student record along with attendances, lateness & adjustments to free database space.
+     */
+    public function destroyAlumni(Student $student): RedirectResponse
+    {
+        $name = $student->name;
+        $studentId = $student->id;
+
+        DB::transaction(function () use ($student, $studentId) {
+            $attendanceIds = Attendance::where('student_id', $studentId)->pluck('id')->toArray();
+
+            if (!empty($attendanceIds)) {
+                $adjustments = AttendanceAdjustment::whereIn('attendance_id', $attendanceIds)->get();
+                foreach ($adjustments as $adj) {
+                    if ($adj->attachment_path && Storage::disk('public')->exists($adj->attachment_path)) {
+                        Storage::disk('public')->delete($adj->attachment_path);
+                    }
+                }
+                AttendanceAdjustment::whereIn('attendance_id', $attendanceIds)->delete();
+                Attendance::whereIn('id', $attendanceIds)->delete();
+            }
+
+            $student->delete();
+        });
+
+        return back()->with('success', "Data alumni '{$name}' beserta seluruh riwayat absensi, keterlambatan, dan absen khusus berhasil dihapus.");
+    }
+
+    /**
+     * Bulk delete alumni records along with attendances, lateness, and adjustments.
+     */
+    public function bulkDestroyAlumni(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'mode' => 'required|in:selected,year,all',
+            'student_ids' => 'nullable|array',
+            'student_ids.*' => 'integer|exists:students,id',
+            'graduation_year' => 'nullable|string|max:30',
+        ]);
+
+        $query = Student::where('is_alumni', true);
+
+        if ($validated['mode'] === 'selected') {
+            if (empty($validated['student_ids'])) {
+                return back()->with('error', 'Silakan pilih setidaknya 1 data alumni yang ingin dihapus.');
+            }
+            $query->whereIn('id', $validated['student_ids']);
+        } elseif ($validated['mode'] === 'year') {
+            if (empty($validated['graduation_year'])) {
+                return back()->with('error', 'Silakan tentukan tahun kelulusan alumni yang ingin dihapus.');
+            }
+            $query->where('graduation_year', $validated['graduation_year']);
+        }
+
+        $alumniIds = $query->pluck('id')->toArray();
+        $alumniCount = count($alumniIds);
+
+        if ($alumniCount === 0) {
+            return back()->with('error', 'Tidak ada data alumni yang cocok dengan kriteria penghapusan.');
+        }
+
+        $deletedMetrics = DB::transaction(function () use ($alumniIds) {
+            // 1. Ambil ID riwayat absensi dari semua alumni yang akan dihapus
+            $attendanceIds = Attendance::whereIn('student_id', $alumniIds)->pluck('id')->toArray();
+
+            $adjCount = 0;
+            if (!empty($attendanceIds)) {
+                // 2. Hapus file lampiran absen khusus (bukti izin/sakit) dari storage jika ada
+                $adjustments = AttendanceAdjustment::whereIn('attendance_id', $attendanceIds)->get();
+                $adjCount = $adjustments->count();
+
+                foreach ($adjustments as $adj) {
+                    if ($adj->attachment_path && Storage::disk('public')->exists($adj->attachment_path)) {
+                        Storage::disk('public')->delete($adj->attachment_path);
+                    }
+                }
+
+                // 3. Hapus data absen khusus (AttendanceAdjustment)
+                AttendanceAdjustment::whereIn('attendance_id', $attendanceIds)->delete();
+
+                // 4. Hapus data absensi & keterlambatan (Attendance)
+                $attCount = Attendance::whereIn('id', $attendanceIds)->delete();
+            } else {
+                $attCount = 0;
+            }
+
+            // 5. Hapus data master alumni (Student)
+            $studCount = Student::whereIn('id', $alumniIds)->delete();
+
+            return [
+                'students' => $studCount,
+                'attendances' => $attCount,
+                'adjustments' => $adjCount,
+            ];
+        });
+
+        return back()->with(
+            'success',
+            "Pembersihan berhasil! {$deletedMetrics['students']} data alumni, {$deletedMetrics['attendances']} riwayat absensi & keterlambatan, dan {$deletedMetrics['adjustments']} absen khusus telah dihapus permanen dari database."
+        );
     }
 }

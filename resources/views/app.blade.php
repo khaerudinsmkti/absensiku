@@ -30,9 +30,31 @@
             }
         </style>
 
-        <link rel="icon" href="/favicon.ico" sizes="any">
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-        <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        @php
+            $schoolSetting = \App\Models\SchoolSetting::getSetting();
+            $schoolLogoUrl = $schoolSetting->logo_url;
+            $appName = $schoolSetting->name ?: config('app.name', 'AbsensiKu');
+        @endphp
+
+        {{-- Dynamic Favicon & Icons from School Settings --}}
+        @if($schoolLogoUrl)
+            <link rel="icon" href="{{ $schoolLogoUrl }}" type="image/png">
+            <link rel="shortcut icon" href="{{ $schoolLogoUrl }}">
+            <link rel="apple-touch-icon" href="{{ $schoolLogoUrl }}">
+        @else
+            <link rel="icon" href="/favicon.ico" sizes="any">
+            <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+            <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+        @endif
+
+        {{-- PWA Manifest & Meta Tags --}}
+        <link rel="manifest" href="/manifest.json">
+        <meta name="theme-color" content="#FF6B35">
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="default">
+        <meta name="apple-mobile-web-app-title" content="{{ $appName }}">
+        <meta name="application-name" content="{{ $appName }}">
 
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -49,5 +71,21 @@
     </head>
     <body class="font-sans antialiased">
         <x-inertia::app />
+
+        {{-- Register Service Worker for PWA --}}
+        <script>
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').then(
+                        function(reg) {
+                            console.log('[PWA] Service Worker terdaftar dengan scope:', reg.scope);
+                        },
+                        function(err) {
+                            console.warn('[PWA] Pendaftaran Service Worker gagal:', err);
+                        }
+                    );
+                });
+            }
+        </script>
     </body>
 </html>

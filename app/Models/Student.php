@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -19,12 +20,18 @@ class Student extends Model
         'nis',
         'gender',
         'is_active',
+        'is_alumni',
+        'graduation_year',
+        'next_school',
+        'alumni_phone',
+        'alumni_notes',
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'is_alumni' => 'boolean',
         ];
     }
 
@@ -42,5 +49,20 @@ class Student extends Model
     {
         return $this->hasMany(Attendance::class);
     }
-}
 
+    /**
+     * Scope query to only include active students.
+     */
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    /**
+     * Scope query to only include alumni (graduated students).
+     */
+    public function scopeAlumni(Builder $query): Builder
+    {
+        return $query->where('is_alumni', true)->orWhere('is_active', false);
+    }
+}

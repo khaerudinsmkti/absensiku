@@ -14,6 +14,49 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [WelcomeController::class, 'index'])->name('home');
 Route::redirect('/register', '/login');
 
+Route::get('/manifest.json', function () {
+    $school = \App\Models\SchoolSetting::getSetting();
+    $name = $school->name ?: 'AbsensiKu';
+    $shortName = 'AbsensiKu';
+    $logoUrl = $school->logo_url ?: asset('favicon.ico');
+
+    return response()->json([
+        'name' => $name,
+        'short_name' => $shortName,
+        'description' => 'Aplikasi Presensi Siswa dan Manajemen Sekolah - ' . $name,
+        'start_url' => '/',
+        'scope' => '/',
+        'display' => 'standalone',
+        'orientation' => 'portrait-primary',
+        'background_color' => '#FFFFFF',
+        'theme_color' => '#FF6B35',
+        'categories' => ['education', 'productivity'],
+        'icons' => [
+            [
+                'src' => $logoUrl,
+                'sizes' => '192x192',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $logoUrl,
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'any',
+            ],
+            [
+                'src' => $logoUrl,
+                'sizes' => '512x512',
+                'type' => 'image/png',
+                'purpose' => 'maskable',
+            ],
+        ],
+    ], 200, [
+        'Content-Type' => 'application/manifest+json; charset=UTF-8',
+        'Cache-Control' => 'no-cache, private',
+    ]);
+})->name('pwa.manifest');
+
 Route::middleware(['auth', 'verified'])->group(function () {
     // 1. Dashboard Eksekutif & Ringkasan Realtime
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -56,6 +99,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/master/students/{student}', [MasterDataController::class, 'destroyStudent'])->name('master.students.destroy');
         Route::post('/master/students/batch-import', [MasterDataController::class, 'batchImportStudents'])->name('master.students.batch-import');
         Route::post('/master/promotions', [MasterDataController::class, 'processPromotions'])->name('master.promotions.process');
+        Route::put('/master/alumni/{student}', [MasterDataController::class, 'updateAlumni'])->name('master.alumni.update');
+        Route::post('/master/alumni/{student}/restore', [MasterDataController::class, 'restoreAlumni'])->name('master.alumni.restore');
+        Route::post('/master/alumni/graduate', [MasterDataController::class, 'graduateStudent'])->name('master.alumni.graduate');
+        Route::post('/master/alumni/bulk-destroy', [MasterDataController::class, 'bulkDestroyAlumni'])->name('master.alumni.bulk-destroy');
+        Route::delete('/master/alumni/{student}', [MasterDataController::class, 'destroyAlumni'])->name('master.alumni.destroy');
 
         // Guru CRUD & Batch Import
         Route::post('/master/teachers', [MasterDataController::class, 'storeTeacher'])->name('master.teachers.store');
