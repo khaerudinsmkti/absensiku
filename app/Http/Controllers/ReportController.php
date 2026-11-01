@@ -92,6 +92,8 @@ class ReportController extends Controller
         ];
 
         $days = [];
+        $isSaturdayOff = AcademicHoliday::isSaturdayHoliday();
+
         if ($filterType === 'monthly' || $daysCount <= 31) {
             $temp = $carbonStart->copy();
             while ($temp->lte($carbonEnd)) {
@@ -105,6 +107,8 @@ class ReportController extends Controller
                 ];
                 $isSunday = $temp->isSunday();
                 $isSaturday = $temp->isSaturday();
+                $isSaturdayHoliday = $isSaturday && $isSaturdayOff;
+                $isWeekend = $isSunday || $isSaturdayHoliday;
 
                 $days[] = [
                     'date' => $dateStr,
@@ -113,7 +117,8 @@ class ReportController extends Controller
                     'day_initial' => $dayData['initial'],
                     'is_sunday' => $isSunday,
                     'is_saturday' => $isSaturday,
-                    'is_weekend' => $isSunday || $isSaturday,
+                    'is_saturday_off' => $isSaturdayHoliday,
+                    'is_weekend' => $isWeekend,
                     'is_holiday' => $isHoliday,
                     'holiday_name' => $holidayInfo['name'] ?? null,
                     'holiday_type' => $holidayInfo['type'] ?? null,
@@ -124,8 +129,8 @@ class ReportController extends Controller
             }
         }
 
-        // Calculate effective school days (excluding Sundays and official holidays)
-        $effectiveSchoolDays = collect($days)->filter(fn ($d) => ! $d['is_sunday'] && ! $d['is_holiday'])->count();
+        // Calculate effective school days (excluding weekends and official holidays)
+        $effectiveSchoolDays = collect($days)->filter(fn ($d) => ! $d['is_weekend'] && ! $d['is_holiday'])->count();
 
         $students = [];
         $dailyTotals = [];
@@ -323,86 +328,165 @@ class ReportController extends Controller
         $periodLabel = str_replace(' ', '_', $data['periodLabel']);
         $days = $data['days'];
         $students = $data['students'];
-
-        $fileName = "Rekap_Presensi_{$className}_{$periodLabel}.csv";
+        $dailyTotals = $data['dailyTotals'];
         $genderStats = $data['genderStats'];
+        $school = SchoolSetting::getSetting();
 
-        return response()->streamDownload(function () use ($students, $days, $classroom, $genderStats) {
+        $fileName = "Rekap_Presensi_{$className}_{$periodLabel}.xls";
+
+        return response()->streamDownload(function () use ($students, $days, $classroom, $genderStats, $data, $school, $dailyTotals) {
             $handle = fopen('php://output', 'w');
 
-            // UTF-8 BOM for Excel compatibility
+            // UTF-8 BOM
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            // Construct header
-            $header = [
-                'No',
-                'NISN',
-                'NIS',
-                'Nama Peserta Didik',
-                'Kelas',
-                'L/P',
-            ];
+            $output = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">';
+            $output .= '<head>';
+            $output .= '<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />';
+            $output .= '<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Rekap Presensi</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->';
+            $output .= '<style>';
+            $output .= 'table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 11px; }';
+            $output .= 'th, td { border: 1px solid #B0BEC5; padding: 6px 8px; vertical-align: middle; }';
+            $output .= 'th { background-color: #EA580C; color: #FFFFFF; font-weight: bold; text-align: center; }';
+            $output .= 'th.sub { background-color: #F97316; font-size: 10px; }';
+            $output .= '.text-center { text-align: center; }';
+            $output .= '.text-left { text-align: left; }';
+            $output .= '.text-right { text-align: right; }';
+            $output .= '.font-bold { font-weight: bold; }';
+            $output .= '.weekend { background-color: #FEE2E2; color: #DC2626; text-align: center; font-weight: bold; }';
+            $output .= '.num { mso-number-format: "\@"; text-align: center; }';
+            $output .= '.meta-title { font-size: 15px; font-weight: bold; color: #1E293B; text-align: center; border: none; }';
+            $output .= '.meta-sub { font-size: 11px; color: #64748B; text-align: center; border: none; }';
+            $output .= '.meta-info { font-size: 11px; font-weight: bold; color: #334155; border: none; }';
+            $output .= '.footer-total { background-color: #F1F5F9; font-weight: bold; text-align: center; }';
+            $output .= '</style>';
+            $output .= '</head>';
+            $output .= '<body>';
+
+            $totalCols = 6 + count($days) + 6;
+
+            // Header Meta Information
+            $output .= '<table>';
+            $output .= '<tr><td colspan="' . $totalCols . '" class="meta-title">' . htmlspecialchars(strtoupper($school->name ?? 'SEKOLAH DIGITAL')) . '</td></tr>';
+            $output .= '<tr><td colspan="' . $totalCols . '" class="meta-title">DAFTAR HADIR SISWA (REKAPITULASI PRESENSI)</td></tr>';
+            $output .= '<tr><td colspan="' . $totalCols . '" class="meta-sub">Periode: ' . htmlspecialchars($data['periodLabel']) . ' | Kelas: ' . htmlspecialchars($classroom?->name ?? 'Semua Kelas') . '</td></tr>';
+            $output .= '<tr><td colspan="' . $totalCols . '" style="border:none;">&nbsp;</td></tr>';
+            $output .= '</table>';
+
+            // Main Matrix Table
+            $output .= '<table>';
+            $output .= '<thead>';
+            $output .= '<tr>';
+            $output .= '<th rowspan="2">No</th>';
+            $output .= '<th rowspan="2">NISN</th>';
+            $output .= '<th rowspan="2">NIS</th>';
+            $output .= '<th rowspan="2">Nama Peserta Didik</th>';
+            $output .= '<th rowspan="2">Kelas</th>';
+            $output .= '<th rowspan="2">L/P</th>';
 
             if (count($days) > 0) {
-                foreach ($days as $day) {
-                    $header[] = $day['day'];
-                }
+                $output .= '<th colspan="' . count($days) . '">Tanggal</th>';
             }
 
-            $header[] = 'Hadir (H)';
-            $header[] = 'Sakit (S)';
-            $header[] = 'Izin (I)';
-            $header[] = 'Alpha (A)';
-            $header[] = 'Terlambat (T)';
-            $header[] = 'Persentase Kehadiran (%)';
+            $output .= '<th colspan="6">Rekapitulasi Kehadiran</th>';
+            $output .= '</tr>';
 
-            fputcsv($handle, $header);
+            // Subheader: Days 1-31 and Status Titles
+            $output .= '<tr>';
+            if (count($days) > 0) {
+                foreach ($days as $day) {
+                    $isWeekendOrHoliday = $day['is_weekend'] || !empty($day['is_holiday']);
+                    $thClass = $isWeekendOrHoliday ? 'weekend' : 'sub';
+                    $output .= '<th class="' . $thClass . '">' . $day['day'] . '<br><small>' . ($day['day_initial'] ?? '') . '</small></th>';
+                }
+            }
+            $output .= '<th class="sub">Hadir (H)</th>';
+            $output .= '<th class="sub">Sakit (S)</th>';
+            $output .= '<th class="sub">Izin (I)</th>';
+            $output .= '<th class="sub">Alpha (A)</th>';
+            $output .= '<th class="sub">Telat (T)</th>';
+            $output .= '<th class="sub">% Hadir</th>';
+            $output .= '</tr>';
+            $output .= '</thead>';
 
+            // Rows
+            $output .= '<tbody>';
             $no = 1;
             foreach ($students as $student) {
-                $row = [
-                    $no++,
-                    $student['nisn'],
-                    $student['nis'],
-                    $student['name'],
-                    $classroom->name ?? '-',
-                    $student['gender'],
-                ];
+                $output .= '<tr>';
+                $output .= '<td class="text-center font-bold">' . $no++ . '</td>';
+                $output .= '<td class="num">' . htmlspecialchars($student['nisn']) . '</td>';
+                $output .= '<td class="num">' . htmlspecialchars($student['nis']) . '</td>';
+                $output .= '<td class="font-bold">' . htmlspecialchars($student['name']) . '</td>';
+                $output .= '<td class="text-center">' . htmlspecialchars($classroom?->name ?? '-') . '</td>';
+                $output .= '<td class="text-center font-bold">' . $student['gender'] . '</td>';
 
                 if (count($days) > 0) {
                     foreach ($days as $day) {
                         $daily = $student['daily_attendances'][$day['day']] ?? null;
-                        $row[] = $daily['code'] ?? ($day['is_sunday'] ? '-' : '.');
+                        $code = $daily['code'] ?? ($day['is_weekend'] ? '-' : '.');
+                        $isWeekendOrHoliday = $day['is_weekend'] || !empty($day['is_holiday']);
+                        $cellClass = $isWeekendOrHoliday ? 'weekend' : 'text-center';
+                        $output .= '<td class="' . $cellClass . '">' . htmlspecialchars($code) . '</td>';
                     }
                 }
 
-                $row[] = $student['hadir'];
-                $row[] = $student['sakit'];
-                $row[] = $student['izin'];
-                $row[] = $student['alpha'];
-                $row[] = $student['terlambat'];
-                $row[] = $student['percentage'] . '%';
+                $output .= '<td class="text-center font-bold" style="color:#059669;">' . $student['hadir'] . '</td>';
+                $output .= '<td class="text-center font-bold" style="color:#2563EB;">' . $student['sakit'] . '</td>';
+                $output .= '<td class="text-center font-bold" style="color:#D97706;">' . $student['izin'] . '</td>';
+                $output .= '<td class="text-center font-bold" style="color:#DC2626;">' . $student['alpha'] . '</td>';
+                $output .= '<td class="text-center font-bold" style="color:#7C3AED;">' . $student['terlambat'] . '</td>';
+                $output .= '<td class="text-center font-bold">' . $student['percentage'] . '%</td>';
+                $output .= '</tr>';
+            }
+            $output .= '</tbody>';
 
-                fputcsv($handle, $row);
+            // Footer: Daily Totals
+            if (count($days) > 0) {
+                $output .= '<tfoot>';
+                $output .= '<tr>';
+                $output .= '<td colspan="6" class="footer-total" style="text-align:right;">Jumlah Hadir Per Tanggal:</td>';
+                foreach ($days as $day) {
+                    $d = $day['day'];
+                    $tot = $dailyTotals[$d]['hadir'] ?? 0;
+                    $isWeekendOrHoliday = $day['is_weekend'] || !empty($day['is_holiday']);
+                    $cellClass = $isWeekendOrHoliday ? 'weekend' : 'footer-total';
+                    $output .= '<td class="' . $cellClass . '">' . ($isWeekendOrHoliday ? '-' : $tot) . '</td>';
+                }
+                $output .= '<td class="footer-total">' . collect($students)->sum('hadir') . '</td>';
+                $output .= '<td class="footer-total">' . collect($students)->sum('sakit') . '</td>';
+                $output .= '<td class="footer-total">' . collect($students)->sum('izin') . '</td>';
+                $output .= '<td class="footer-total">' . collect($students)->sum('alpha') . '</td>';
+                $output .= '<td class="footer-total">' . collect($students)->sum('terlambat') . '</td>';
+                $output .= '<td class="footer-total">-</td>';
+                $output .= '</tr>';
+                $output .= '</tfoot>';
             }
 
-            // Append gender breakdown and signature block at the bottom
-            fputcsv($handle, []);
-            fputcsv($handle, ['Keterangan Siswa:']);
-            fputcsv($handle, ['Jumlah Laki-laki = ' . ($genderStats['male'] ?? 0)]);
-            fputcsv($handle, ['Jumlah Perempuan = ' . ($genderStats['female'] ?? 0)]);
-            fputcsv($handle, ['Total = ' . ($genderStats['total'] ?? 0)]);
+            $output .= '</table>';
 
-            $school = SchoolSetting::getSetting();
-            fputcsv($handle, []);
-            fputcsv($handle, ['Mengetahui,']);
-            fputcsv($handle, ['Kepala Sekolah ' . ($school->name ?? '')]);
-            fputcsv($handle, [$school->principal_name ?? '']);
-            fputcsv($handle, ['NIP. ' . ($school->principal_nip ?? '-')]);
+            // Summary notes & signatures
+            $output .= '<br/>';
+            $output .= '<table>';
+            $output .= '<tr><td colspan="4" class="meta-info">Keterangan Siswa:</td></tr>';
+            $output .= '<tr><td colspan="4" style="border:none;">Jumlah Laki-laki = ' . ($genderStats['male'] ?? 0) . ' Siswa</td></tr>';
+            $output .= '<tr><td colspan="4" style="border:none;">Jumlah Perempuan = ' . ($genderStats['female'] ?? 0) . ' Siswa</td></tr>';
+            $output .= '<tr><td colspan="4" style="border:none;font-weight:bold;">Total = ' . ($genderStats['total'] ?? 0) . ' Siswa</td></tr>';
+            $output .= '<tr><td colspan="4" style="border:none;">&nbsp;</td></tr>';
+            $output .= '<tr>';
+            $output .= '<td colspan="3" style="border:none;">Mengetahui,<br/>Kepala Sekolah ' . htmlspecialchars($school->name ?? '') . '<br/><br/><br/><br/><b>' . htmlspecialchars($school->principal_name ?? '-') . '</b><br/>NIP. ' . htmlspecialchars($school->principal_nip ?? '-') . '</td>';
+            $output .= '<td colspan="3" style="border:none;">' . htmlspecialchars($school->city ?? 'Kota') . ', ' . Carbon::today()->translatedFormat('d F Y') . '<br/>Wali Kelas ' . htmlspecialchars($classroom?->name ?? '') . '<br/><br/><br/><br/><b>' . htmlspecialchars($classroom?->homeroomTeacher?->name ?? '-') . '</b><br/>NIP. ' . htmlspecialchars($classroom?->homeroomTeacher?->nip ?? '-') . '</td>';
+            $output .= '</tr>';
+            $output .= '</table>';
 
+            $output .= '</body></html>';
+
+            fwrite($handle, $output);
             fclose($handle);
         }, $fileName, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$fileName}\"",
+            'Cache-Control' => 'max-age=0',
         ]);
     }
 

@@ -71,17 +71,17 @@ export function StatCard({
     return (
         <div
             className={cn(
-                'group relative flex flex-col justify-between rounded-[18px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-6px_rgba(255,107,53,0.12)] dark:border-[#2D234A] dark:bg-[#18122B]',
+                'group relative flex flex-col justify-between overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white p-4 sm:p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_12px_24px_-6px_rgba(255,107,53,0.12)] dark:border-[#2D234A] dark:bg-[#18122B]',
                 className,
             )}
         >
-            <div className="flex items-start justify-between gap-3">
-                <div className="flex-1">
-                    <span className="text-xs font-semibold text-[#6B7280] uppercase tracking-wider dark:text-[#9CA3AF]">
+            <div className="flex items-start justify-between gap-3 min-w-0">
+                <div className="flex-1 min-w-0">
+                    <span className="block text-xs font-bold text-[#6B7280] uppercase tracking-wider dark:text-[#9CA3AF] leading-snug">
                         {title}
                     </span>
                     <div className="mt-1 flex items-baseline gap-2">
-                        <span className="text-[28px] font-extrabold tracking-tight text-[#111827] leading-none dark:text-white">
+                        <span className="text-[26px] sm:text-[30px] font-extrabold tracking-tight text-[#111827] leading-none dark:text-white">
                             {value}
                         </span>
                     </div>
@@ -89,26 +89,26 @@ export function StatCard({
 
                 <div
                     className={cn(
-                        'flex size-[52px] shrink-0 items-center justify-center rounded-[14px] transition-transform duration-200 group-hover:scale-105',
+                        'flex size-11 sm:size-12 shrink-0 items-center justify-center rounded-[14px] transition-transform duration-200 group-hover:scale-105',
                         theme.iconBg,
                         theme.iconColor,
                     )}
                 >
-                    <Icon className="size-6 stroke-[2.2]" />
+                    <Icon className="size-5 sm:size-6 stroke-[2.2]" />
                 </div>
             </div>
 
             {(subtitle || trend || action) && (
-                <div className="mt-4 flex items-center justify-between border-t border-[#F5F5F5] pt-3 text-xs dark:border-[#231A3A]">
+                <div className="mt-4 flex items-center justify-between border-t border-[#F5F5F5] pt-3 text-xs dark:border-[#231A3A] min-w-0">
                     {subtitle && (
-                        <span className="text-[#6B7280] font-medium dark:text-[#9CA3AF]">
+                        <span className="text-[#6B7280] font-medium dark:text-[#9CA3AF] truncate">
                             {subtitle}
                         </span>
                     )}
                     {trend && (
                         <span
                             className={cn(
-                                'inline-flex items-center gap-1 font-bold rounded-md px-2 py-0.5 text-[11px]',
+                                'inline-flex items-center gap-1 font-bold rounded-md px-2 py-0.5 text-[11px] shrink-0',
                                 trend.isPositive
                                     ? 'bg-[#DCFCE7] text-[#059669] dark:bg-[#064E3B] dark:text-[#34D399]'
                                     : 'bg-[#FEE2E2] text-[#DC2626] dark:bg-[#7F1D1D] dark:text-[#F87171]',

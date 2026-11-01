@@ -45,17 +45,56 @@ interface PageProps {
         joint_leaves: number;
         school_holidays: number;
     };
+    schoolSetting?: {
+        school_days_per_week: number;
+        is_saturday_holiday: boolean;
+    };
 }
 
 export default function HolidaysIndexPage({
     holidays = [],
     selectedYear,
     stats,
+    schoolSetting,
 }: PageProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [typeFilter, setTypeFilter] = useState('all');
     const [showModal, setShowModal] = useState(false);
     const [editingItem, setEditingItem] = useState<AcademicHolidayItem | null>(null);
+    const [schoolDays, setSchoolDays] = useState<number>(schoolSetting?.school_days_per_week ?? 6);
+    const [isSavingDays, setIsSavingDays] = useState(false);
+
+    React.useEffect(() => {
+        if (schoolSetting?.school_days_per_week) {
+            setSchoolDays(schoolSetting.school_days_per_week);
+        }
+    }, [schoolSetting?.school_days_per_week]);
+
+    const handleUpdateSchoolDays = (days: number) => {
+        if (days === schoolDays || isSavingDays) return;
+        setIsSavingDays(true);
+        router.patch(
+            '/admin/holidays/school-days',
+            { school_days_per_week: days },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setSchoolDays(days);
+                    toast.success(
+                        days === 5
+                            ? 'Sistem 5 Hari Sekolah berhasil diterapkan (Sabtu libur)'
+                            : 'Sistem 6 Hari Sekolah berhasil diterapkan (Sabtu masuk)'
+                    );
+                },
+                onError: () => {
+                    toast.error('Gagal memperbarui pengaturan hari sekolah');
+                },
+                onFinish: () => {
+                    setIsSavingDays(false);
+                },
+            }
+        );
+    };
 
     const holidayForm = useForm({
         name: '',
@@ -178,6 +217,77 @@ export default function HolidaysIndexPage({
                         </div>
                     }
                 />
+
+                {/* Pengaturan Hari Belajar Efektif Mingguan (5 Hari vs 6 Hari) */}
+                <div className="relative overflow-hidden rounded-[22px] border-2 border-orange-200/80 bg-gradient-to-br from-orange-50/70 via-amber-50/40 to-white p-5 shadow-[0_4px_20px_rgba(255,107,53,0.06)] dark:border-[#2D234A] dark:from-[#1F1735] dark:via-[#18122B] dark:to-[#18122B]">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="flex items-start gap-3.5">
+                            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#FF6B35] to-[#FF8C5A] text-white shadow-md shadow-orange-500/20">
+                                <CalendarRange className="size-6" />
+                            </div>
+                            <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <h3 className="text-sm font-extrabold text-gray-900 dark:text-white">
+                                        Sistem Hari Belajar Efektif Mingguan
+                                    </h3>
+                                    <span
+                                        className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-black uppercase tracking-wider ${
+                                            schoolDays === 5
+                                                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-300 border border-rose-200 dark:border-rose-900'
+                                                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900'
+                                        }`}
+                                    >
+                                        <span className="size-1.5 rounded-full bg-current"></span>
+                                        {schoolDays === 5 ? '5 Hari Sekolah (Sabtu Libur)' : '6 Hari Sekolah (Sabtu Masuk)'}
+                                    </span>
+                                </div>
+                                <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 max-w-2xl leading-relaxed">
+                                    {schoolDays === 5 ? (
+                                        <>
+                                            Sekolah menerapkan sistem <strong>5 hari belajar (Senin - Jumat)</strong>. Hari <strong>Sabtu dan Minggu</strong> otomatis dihitung sebagai <strong>libur akhir pekan</strong> pada kalender pendidikan, rekap laporan kehadiran, dan input absensi dinonaktifkan.
+                                        </>
+                                    ) : (
+                                        <>
+                                            Sekolah menerapkan sistem <strong>6 hari belajar (Senin - Sabtu)</strong>. Hari <strong>Sabtu</strong> adalah <strong>hari aktif sekolah</strong>, dan hanya hari Minggu yang menjadi libur akhir pekan.
+                                        </>
+                                    )}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Interactive Selector Pill */}
+                        <div className="flex items-center gap-2 rounded-2xl bg-white/95 p-1.5 shadow-sm border border-gray-200/90 dark:bg-gray-800/90 dark:border-gray-700 self-start lg:self-center shrink-0">
+                            <button
+                                type="button"
+                                disabled={isSavingDays}
+                                onClick={() => handleUpdateSchoolDays(5)}
+                                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                    schoolDays === 5
+                                        ? 'bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand ring-1 ring-orange-400/50'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                                title="Pilih 5 Hari Belajar: Senin sampai Jumat (Sabtu Libur)"
+                            >
+                                <span>5 Hari (Senin - Jumat)</span>
+                                {schoolDays === 5 && <CheckCircle2 className="size-3.5" />}
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isSavingDays}
+                                onClick={() => handleUpdateSchoolDays(6)}
+                                className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                                    schoolDays === 6
+                                        ? 'bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand ring-1 ring-orange-400/50'
+                                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700'
+                                }`}
+                                title="Pilih 6 Hari Belajar: Senin sampai Sabtu (Sabtu Masuk)"
+                            >
+                                <span>6 Hari (Senin - Sabtu)</span>
+                                {schoolDays === 6 && <CheckCircle2 className="size-3.5" />}
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
                 {/* Stat Cards */}
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">

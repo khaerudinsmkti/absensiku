@@ -4,7 +4,12 @@ use App\Models\Attendance;
 use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\User;
+use Carbon\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
+
+beforeEach(function () {
+    Carbon::setTestNow('2026-10-28 08:00:00');
+});
 
 test('authenticated user can view adjustments page with eligible students and classrooms', function () {
     $admin = User::factory()->create(['role' => 'admin']);

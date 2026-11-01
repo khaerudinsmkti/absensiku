@@ -8,9 +8,10 @@ use App\Http\Controllers\LatenessController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SchoolSettingController;
+use App\Http\Controllers\WelcomeController;
 use Illuminate\Support\Facades\Route;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::get('/', [WelcomeController::class, 'index'])->name('home');
 Route::redirect('/register', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -54,6 +55,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/master/students/{student}', [MasterDataController::class, 'updateStudent'])->name('master.students.update');
         Route::delete('/master/students/{student}', [MasterDataController::class, 'destroyStudent'])->name('master.students.destroy');
         Route::post('/master/students/batch-import', [MasterDataController::class, 'batchImportStudents'])->name('master.students.batch-import');
+        Route::post('/master/promotions', [MasterDataController::class, 'processPromotions'])->name('master.promotions.process');
 
         // Guru CRUD & Batch Import
         Route::post('/master/teachers', [MasterDataController::class, 'storeTeacher'])->name('master.teachers.store');
@@ -68,6 +70,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         // Kalender Pendidikan & Hari Libur Nasional
         Route::get('/admin/holidays', [HolidayController::class, 'index'])->name('holidays.index');
         Route::post('/admin/holidays', [HolidayController::class, 'store'])->name('holidays.store');
+        Route::patch('/admin/holidays/school-days', [HolidayController::class, 'updateSchoolDays'])->name('holidays.school-days');
         Route::put('/admin/holidays/{holiday}', [HolidayController::class, 'update'])->name('holidays.update');
         Route::delete('/admin/holidays/{holiday}', [HolidayController::class, 'destroy'])->name('holidays.destroy');
         Route::post('/admin/holidays/seed', [HolidayController::class, 'seed'])->name('holidays.seed');

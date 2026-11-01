@@ -88,15 +88,7 @@ class LatenessController extends Controller
         $cutoffTime = substr($schoolSetting->start_time ?: '07:00', 0, 5);
 
         $isFutureDate = $date > $today;
-        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
-        if (! $holiday && Carbon::parse($date)->isSunday()) {
-            $holiday = (object) [
-                'name' => 'Hari Minggu',
-                'type' => 'weekend',
-                'type_name' => 'Libur Akhir Pekan',
-                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
-            ];
-        }
+        $holiday = \App\Models\AcademicHoliday::getOffDay($date);
 
         return Inertia::render('attendances/lateness', [
             'selectedDate' => $date,
@@ -129,10 +121,9 @@ class LatenessController extends Controller
             return back()->with('error', 'Tidak dapat menginput data keterlambatan untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
         }
 
-        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
-        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
-            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
-            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Keterlambatan tidak dapat diinput.");
+        $offDay = \App\Models\AcademicHoliday::getOffDay($validated['date']);
+        if ($offDay) {
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Keterlambatan tidak dapat diinput.");
         }
 
         if ($request->user()->role === 'teacher') {
@@ -207,10 +198,9 @@ class LatenessController extends Controller
             return back()->with('error', 'Tidak dapat mengubah data keterlambatan untuk tanggal di masa mendatang.');
         }
 
-        $holiday = \App\Models\AcademicHoliday::isHoliday($attendanceDate);
-        if ($holiday || Carbon::parse($attendanceDate)->isSunday()) {
-            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
-            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$holidayName}). Data keterlambatan tidak dapat diubah.");
+        $offDay = \App\Models\AcademicHoliday::getOffDay($attendanceDate);
+        if ($offDay) {
+            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$offDay->name}). Data keterlambatan tidak dapat diubah.");
         }
 
         $schoolSetting = SchoolSetting::getSetting();

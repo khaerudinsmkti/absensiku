@@ -248,58 +248,11 @@ class DashboardController extends Controller
             ],
         ];
 
-        // Fetch students for the selected class with today's attendance & adjustments
+        // Student list is no longer rendered on the dashboard (moved exclusively to Attendances page)
         $students = [];
-        if ($selectedClassroomId) {
-            $students = Student::where('classroom_id', $selectedClassroomId)
-                ->where('is_active', true)
-                ->with(['attendances' => function ($q) use ($date) {
-                    $q->where('date', $date)->with('latestAdjustment');
-                }])
-                ->orderBy('name')
-                ->get()
-                ->map(function ($student) {
-                    $attendance = $student->attendances->first();
-                    return [
-                        'id' => $student->id,
-                        'name' => $student->name,
-                        'nisn' => $student->nisn,
-                        'nis' => $student->nis,
-                        'gender' => $student->gender,
-                        'attendance_id' => $attendance?->id,
-                        'status' => $attendance ? ($attendance->is_late ? 'terlambat' : match ($attendance->status) {
-                            'present' => 'hadir',
-                            'sick' => 'sakit',
-                            'permit' => 'izin',
-                            'absent' => 'alpha',
-                            default => 'hadir'
-                        }) : 'hadir',
-                        'raw_status' => $attendance?->status ?? 'present',
-                        'check_in_time' => $attendance?->check_in_time ? substr($attendance->check_in_time, 0, 5) : ($attendance ? '-' : '07:00'),
-                        'is_late' => (bool) ($attendance?->is_late),
-                        'late_minutes' => $attendance?->late_minutes ?? 0,
-                        'notes' => $attendance?->notes ?? '',
-                        'adjustment' => $attendance?->latestAdjustment ? [
-                            'type' => $attendance->latestAdjustment->type,
-                            'type_name' => $attendance->latestAdjustment->type_name,
-                            'departure_time' => substr($attendance->latestAdjustment->departure_time, 0, 5),
-                            'reason' => $attendance->latestAdjustment->reason,
-                            'pickup_person' => $attendance->latestAdjustment->pickup_person,
-                        ] : null,
-                    ];
-                });
-        }
 
         $isFutureDate = $date > $today;
-        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
-        if (! $holiday && Carbon::parse($date)->isSunday()) {
-            $holiday = (object) [
-                'name' => 'Hari Minggu',
-                'type' => 'weekend',
-                'type_name' => 'Libur Akhir Pekan',
-                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
-            ];
-        }
+        $holiday = \App\Models\AcademicHoliday::getOffDay($date);
 
         return Inertia::render('dashboard', [
             'classrooms' => $classrooms,

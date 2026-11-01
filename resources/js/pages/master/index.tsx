@@ -17,12 +17,13 @@ import {
     Search,
     Shield,
     Trash2,
+    TrendingUp,
     Upload,
     UserCheck,
     Users,
     X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { PageBanner } from '@/components/page-banner';
@@ -34,7 +35,15 @@ interface ClassroomItem {
     academic_year: string;
     homeroom_teacher?: { id: number; name: string } | null;
     students_count?: number;
-    students?: { id: number }[];
+    students?: {
+        id: number;
+        name: string;
+        nisn: string;
+        nis: string;
+        gender: 'L' | 'P';
+        classroom_id: number;
+        is_active: boolean;
+    }[];
 }
 
 interface TeacherItem {
@@ -120,8 +129,210 @@ export default function MasterIndexPage({
     teachers = [],
     dutySchedules = [],
 }: MasterPageProps) {
-    const [activeTab, setActiveTab] = useState<'students' | 'teachers' | 'classrooms' | 'duty'>('students');
+    const [activeTab, setActiveTab] = useState<'students' | 'promotions' | 'teachers' | 'classrooms' | 'duty'>('students');
     const [searchTerm, setSearchTerm] = useState(search);
+
+    // Promotion Tab States
+    const [promoSourceClassId, setPromoSourceClassId] = useState<number | ''>('');
+    const [promoTargetClassId, setPromoTargetClassId] = useState<number | ''>('');
+    const [studentDecisions, setStudentDecisions] = useState<Record<number, { action: 'promote' | 'repeat' | 'graduate'; targetClassId: number | '' }>>({});
+    const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
+    const [isSubmittingPromo, setIsSubmittingPromo] = useState(false);
+    const [showPromoConfirmModal, setShowPromoConfirmModal] = useState(false);
+
+    const promoSourceClass = useMemo(() => {
+        return classrooms.find((c) => c.id === Number(promoSourceClassId));
+    }, [classrooms, promoSourceClassId]);
+
+    const sourceStudents = useMemo(() => {
+        return promoSourceClass?.students || [];
+    }, [promoSourceClass]);
+
+    // When source class changes, initialize student decisions and selections
+    useEffect(() => {
+        if (!promoSourceClass) {
+            setStudentDecisions({});
+            setSelectedStudentIds([]);
+            return;
+        }
+        const initialDecisions: Record<number, { action: 'promote' | 'repeat' | 'graduate'; targetClassId: number | '' }> = {};
+        const ids: number[] = [];
+        promoSourceClass.students?.forEach((st) => {
+            initialDecisions[st.id] = {
+                action: 'promote',
+                targetClassId: promoTargetClassId || '',
+            };
+            ids.push(st.id);
+        });
+        setStudentDecisions(initialDecisions);
+        setSelectedStudentIds(ids);
+    }, [promoSourceClassId, promoSourceClass]);
+
+    const handleSelectAllStudents = () => {
+        if (selectedStudentIds.length === sourceStudents.length) {
+            setSelectedStudentIds([]);
+        } else {
+            setSelectedStudentIds(sourceStudents.map((st) => st.id));
+        }
+    };
+
+    const handleToggleStudentSelect = (id: number) => {
+        setSelectedStudentIds((prev) =>
+            prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+        );
+    };
+
+    const handleSetStudentAction = (id: number, action: 'promote' | 'repeat' | 'graduate') => {
+        setStudentDecisions((prev) => ({
+            ...prev,
+            [id]: {
+                action,
+                targetClassId: action === 'promote' ? (prev[id]?.targetClassId || promoTargetClassId || '') : '',
+            },
+        }));
+    };
+
+    const handleSetStudentTargetClass = (id: number, targetClassId: number | '') => {
+        setStudentDecisions((prev) => ({
+            ...prev,
+            [id]: {
+                action: 'promote',
+                targetClassId,
+            },
+        }));
+    };
+
+    const handleApplyTargetToSelected = () => {
+        if (!promoTargetClassId) {
+            toast.error('Silakan pilih Kelas Tujuan terlebih dahulu');
+            return;
+        }
+        setStudentDecisions((prev) => {
+            const next = { ...prev };
+            selectedStudentIds.forEach((id) => {
+                next[id] = {
+                    action: 'promote',
+                    targetClassId: Number(promoTargetClassId),
+                };
+            });
+            return next;
+        });
+        toast.success(`Kelas tujuan diterapkan ke ${selectedStudentIds.length} siswa`);
+    };
+
+    const handleMarkSelectedAsPromote = () => {
+        setStudentDecisions((prev) => {
+            const next = { ...prev };
+            selectedStudentIds.forEach((id) => {
+                next[id] = {
+                    action: 'promote',
+                    targetClassId: prev[id]?.targetClassId || promoTargetClassId || '',
+                };
+            });
+            return next;
+        });
+        toast.success(`${selectedStudentIds.length} siswa ditandai Naik Kelas`);
+    };
+
+    const handleMarkSelectedAsRepeat = () => {
+        setStudentDecisions((prev) => {
+            const next = { ...prev };
+            selectedStudentIds.forEach((id) => {
+                next[id] = {
+                    action: 'repeat',
+                    targetClassId: '',
+                };
+            });
+            return next;
+        });
+        toast.info(`${selectedStudentIds.length} siswa ditandai Tinggal Kelas`);
+    };
+
+    const handleMarkSelectedAsGraduated = () => {
+        setStudentDecisions((prev) => {
+            const next = { ...prev };
+            selectedStudentIds.forEach((id) => {
+                next[id] = {
+                    action: 'graduate',
+                    targetClassId: '',
+                };
+            });
+            return next;
+        });
+        toast.success(`${selectedStudentIds.length} siswa ditandai Lulus / Alumni`);
+    };
+
+    const promoSummary = useMemo(() => {
+        let promoteCount = 0;
+        let repeatCount = 0;
+        let graduateCount = 0;
+        let invalidCount = 0;
+
+        selectedStudentIds.forEach((id) => {
+            const decision = studentDecisions[id];
+            if (!decision) return;
+            if (decision.action === 'promote') {
+                if (decision.targetClassId) {
+                    promoteCount++;
+                } else {
+                    invalidCount++;
+                }
+            } else if (decision.action === 'repeat') {
+                repeatCount++;
+            } else if (decision.action === 'graduate') {
+                graduateCount++;
+            }
+        });
+
+        return {
+            promoteCount,
+            repeatCount,
+            graduateCount,
+            invalidCount,
+            totalSelected: selectedStudentIds.length,
+        };
+    }, [selectedStudentIds, studentDecisions]);
+
+    const handleSubmitPromotions = () => {
+        if (selectedStudentIds.length === 0) {
+            toast.error('Pilih minimal satu siswa untuk diproses');
+            return;
+        }
+        if (promoSummary.invalidCount > 0) {
+            toast.error(`Ada ${promoSummary.invalidCount} siswa naik kelas yang belum dipilihkan kelas tujuannya`);
+            return;
+        }
+
+        const payload = selectedStudentIds.map((id) => ({
+            student_id: id,
+            action: studentDecisions[id]?.action || 'promote',
+            target_classroom_id: studentDecisions[id]?.action === 'promote' ? studentDecisions[id]?.targetClassId : null,
+        }));
+
+        setIsSubmittingPromo(true);
+        router.post(
+            '/master/promotions',
+            {
+                source_classroom_id: Number(promoSourceClassId),
+                promotions: payload,
+            },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setShowPromoConfirmModal(false);
+                    setPromoSourceClassId('');
+                    setPromoTargetClassId('');
+                    toast.success('Kenaikan kelas berhasil diproses');
+                },
+                onError: (err) => {
+                    toast.error(err?.message || 'Terjadi kesalahan saat memproses kenaikan kelas');
+                },
+                onFinish: () => {
+                    setIsSubmittingPromo(false);
+                },
+            }
+        );
+    };
 
     // Modal States
     const [showStudentModal, setShowStudentModal] = useState(false);
@@ -886,6 +1097,18 @@ export default function MasterIndexPage({
                     </button>
                     <button
                         type="button"
+                        onClick={() => setActiveTab('promotions')}
+                        className={`flex items-center gap-2 pb-3 px-4 text-sm font-bold border-b-2 transition-all ${
+                            activeTab === 'promotions'
+                                ? 'border-[#FF6B35] text-[#FF6B35]'
+                                : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400'
+                        }`}
+                    >
+                        <TrendingUp className="size-4" />
+                        Kenaikan Kelas 🚀
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setActiveTab('teachers')}
                         className={`flex items-center gap-2 pb-3 px-4 text-sm font-bold border-b-2 transition-all ${
                             activeTab === 'teachers'
@@ -1111,8 +1334,458 @@ export default function MasterIndexPage({
                 )}
 
                 {/* ========================================================= */}
-                {/* TAB 2: DATA GURU & STAF (CRUD)                            */}
+                {/* TAB 2: KENAIKAN & KELULUSAN KELAS                         */}
                 {/* ========================================================= */}
+                {activeTab === 'promotions' && (
+                    <div className="flex flex-col gap-6">
+                        {/* Banner Instruksi */}
+                        <div className="relative overflow-hidden rounded-[22px] border-2 border-orange-200/80 bg-gradient-to-br from-orange-50/70 via-amber-50/40 to-white p-5 shadow-[0_4px_20px_rgba(255,107,53,0.06)] dark:border-[#2D234A] dark:from-[#1F1735] dark:via-[#18122B] dark:to-[#18122B]">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div className="flex items-start gap-3.5">
+                                    <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-[#FF6B35] to-[#FF8C5A] text-white shadow-md shadow-orange-500/20">
+                                        <TrendingUp className="size-6" />
+                                    </div>
+                                    <div>
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <h3 className="text-sm font-extrabold text-gray-900 dark:text-white">
+                                                Kenaikan Kelas & Kelulusan Siswa
+                                            </h3>
+                                            <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-[#FF6B35] dark:bg-orange-950 dark:text-orange-300">
+                                                Pergantian Tahun Ajaran
+                                            </span>
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-600 dark:text-gray-300 max-w-2xl leading-relaxed">
+                                            Pilih kelas asal siswa, tentukan kelas tujuan untuk siswa yang naik kelas, siswa yang tinggal kelas, atau tandai kelulusan siswa tingkat akhir (alumni).
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setActiveTab('classrooms')}
+                                        className="text-xs font-bold gap-1.5"
+                                    >
+                                        <Plus className="size-3.5" />
+                                        Kelola / Buat Kelas Baru
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* STEP 1: PILIH KELAS ASAL & KELAS TUJUAN UTAMA */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-[20px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                            <div>
+                                <label className="mb-1.5 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                                    <span>1. Pilih Kelas Asal <span className="text-red-500">*</span></span>
+                                    {promoSourceClass && (
+                                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                            {promoSourceClass.students?.length || 0} Siswa Aktif
+                                        </span>
+                                    )}
+                                </label>
+                                <select
+                                    value={promoSourceClassId}
+                                    onChange={(e) => {
+                                        const val = e.target.value ? Number(e.target.value) : '';
+                                        setPromoSourceClassId(val);
+                                    }}
+                                    className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2.5 text-xs font-extrabold text-gray-800 focus:border-[#FF6B35] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                                >
+                                    <option value="">-- Pilih Kelas Asal Siswa --</option>
+                                    {classrooms.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} ({c.academic_year}) {c.homeroom_teacher ? `• Wali: ${c.homeroom_teacher.name}` : ''} • ({c.students?.length || 0} siswa)
+                                        </option>
+                                    ))}
+                                </select>
+                                {promoSourceClass && (
+                                    <p className="mt-1.5 text-[11px] text-gray-500">
+                                        Wali Kelas: <strong className="text-gray-700 dark:text-gray-300">{promoSourceClass.homeroom_teacher?.name || '-'}</strong> | Tahun Ajaran: <strong className="text-gray-700 dark:text-gray-300">{promoSourceClass.academic_year}</strong>
+                                    </p>
+                                )}
+                            </div>
+
+                            <div>
+                                <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                                    2. Kelas Tujuan Default (Untuk Siswa Naik Kelas)
+                                </label>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={promoTargetClassId}
+                                        onChange={(e) => {
+                                            const val = e.target.value ? Number(e.target.value) : '';
+                                            setPromoTargetClassId(val);
+                                        }}
+                                        disabled={!promoSourceClassId}
+                                        className="w-full rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-2.5 text-xs font-extrabold text-gray-800 focus:border-[#FF6B35] focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-white disabled:opacity-50"
+                                    >
+                                        <option value="">-- Pilih Kelas Tujuan --</option>
+                                        {classrooms
+                                            .filter((c) => c.id !== Number(promoSourceClassId))
+                                            .map((c) => (
+                                                <option key={c.id} value={c.id}>
+                                                    {c.name} ({c.academic_year}) {c.homeroom_teacher ? `• Wali: ${c.homeroom_teacher.name}` : ''}
+                                                </option>
+                                            ))}
+                                    </select>
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="sm"
+                                        disabled={!promoSourceClassId || !promoTargetClassId}
+                                        onClick={handleApplyTargetToSelected}
+                                        className="bg-orange-50 text-[#FF6B35] hover:bg-orange-100 font-bold text-xs shrink-0 whitespace-nowrap border-none"
+                                    >
+                                        Terapkan ke Terpilih
+                                    </Button>
+                                </div>
+                                <p className="mt-1.5 text-[11px] text-gray-500">
+                                    Pilih kelas tingkat berikutnya (misal jika kelas asal 1-A, target: 2-A).
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* STEP 2: DAFTAR SISWA & KONTROL MASSAL */}
+                        {promoSourceClassId ? (
+                            <div className="overflow-hidden rounded-[20px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
+                                {/* Bulk Actions Header Bar */}
+                                <div className="flex flex-col gap-3 border-b border-gray-100 p-5 lg:flex-row lg:items-center lg:justify-between dark:border-gray-800">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">
+                                                Daftar Siswa: {promoSourceClass?.name}
+                                            </h4>
+                                            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-bold text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                                                {promoSummary.totalSelected} dari {sourceStudents.length} Siswa Terpilih
+                                            </span>
+                                        </div>
+                                        <p className="mt-0.5 text-xs text-gray-500">
+                                            Tentukan aksi kenaikan kelas untuk masing-masing siswa di bawah ini.
+                                        </p>
+                                    </div>
+
+                                    {/* Quick Action Badges / Buttons */}
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={handleSelectAllStudents}
+                                            className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                                        >
+                                            {selectedStudentIds.length === sourceStudents.length ? 'Batal Pilih Semua' : 'Pilih Semua Siswa'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleMarkSelectedAsPromote}
+                                            className="rounded-lg bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:text-emerald-300"
+                                        >
+                                            🟢 Naik Kelas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleMarkSelectedAsRepeat}
+                                            className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-700 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300"
+                                        >
+                                            🟡 Tinggal Kelas
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleMarkSelectedAsGraduated}
+                                            className="rounded-lg bg-purple-50 px-2.5 py-1.5 text-xs font-bold text-purple-700 hover:bg-purple-100 dark:bg-purple-950/60 dark:text-purple-300"
+                                        >
+                                            🎓 Lulus (Alumni)
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Summary Pill Bar */}
+                                <div className="flex flex-wrap items-center gap-3 bg-gray-50/80 px-5 py-3 border-b border-gray-100 dark:bg-gray-800/40 dark:border-gray-800 text-xs">
+                                    <span className="font-bold text-gray-600 dark:text-gray-400">Ringkasan Keputusan:</span>
+                                    <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-emerald-400">
+                                        <span className="size-2 rounded-full bg-emerald-500"></span>
+                                        {promoSummary.promoteCount} Naik Kelas
+                                    </span>
+                                    <span>•</span>
+                                    <span className="inline-flex items-center gap-1 font-bold text-amber-700 dark:text-amber-400">
+                                        <span className="size-2 rounded-full bg-amber-500"></span>
+                                        {promoSummary.repeatCount} Tinggal Kelas
+                                    </span>
+                                    <span>•</span>
+                                    <span className="inline-flex items-center gap-1 font-bold text-purple-700 dark:text-purple-400">
+                                        <span className="size-2 rounded-full bg-purple-500"></span>
+                                        {promoSummary.graduateCount} Lulus / Alumni
+                                    </span>
+                                    {promoSummary.invalidCount > 0 && (
+                                        <>
+                                            <span>•</span>
+                                            <span className="inline-flex items-center gap-1 font-bold text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-950 px-2 py-0.5 rounded-md">
+                                                ⚠️ {promoSummary.invalidCount} Belum Pilih Kelas Tujuan
+                                            </span>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Table */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left text-xs">
+                                        <thead>
+                                            <tr className="bg-gray-50 text-[#6B7280] uppercase tracking-wider text-[11px] border-b border-gray-100 dark:bg-gray-800/60 dark:border-gray-800 dark:text-gray-400">
+                                                <th className="px-4 py-3 text-center w-12">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedStudentIds.length === sourceStudents.length && sourceStudents.length > 0}
+                                                        onChange={handleSelectAllStudents}
+                                                        className="size-4 rounded text-[#FF6B35] focus:ring-[#FF6B35]"
+                                                    />
+                                                </th>
+                                                <th className="px-4 py-3">No</th>
+                                                <th className="px-4 py-3">NISN / NIS</th>
+                                                <th className="px-4 py-3">Nama Siswa</th>
+                                                <th className="px-4 py-3 text-center">L/P</th>
+                                                <th className="px-4 py-3">Keputusan</th>
+                                                <th className="px-4 py-3">Kelas Tujuan</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                            {sourceStudents.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={7} className="px-5 py-8 text-center text-gray-500">
+                                                        Tidak ada siswa aktif terdaftar pada kelas ini.
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                sourceStudents.map((st, idx) => {
+                                                    const isSelected = selectedStudentIds.includes(st.id);
+                                                    const decision = studentDecisions[st.id] || { action: 'promote', targetClassId: promoTargetClassId || '' };
+                                                    const isPromote = decision.action === 'promote';
+                                                    const isRepeat = decision.action === 'repeat';
+                                                    const isGraduate = decision.action === 'graduate';
+                                                    const needsTarget = isPromote && !decision.targetClassId;
+
+                                                    return (
+                                                        <tr
+                                                            key={st.id}
+                                                            className={`transition-colors ${
+                                                                !isSelected
+                                                                    ? 'opacity-40 bg-gray-50/50'
+                                                                    : needsTarget
+                                                                      ? 'bg-red-50/40 dark:bg-red-950/20'
+                                                                      : isPromote
+                                                                        ? 'hover:bg-emerald-50/30'
+                                                                        : isRepeat
+                                                                          ? 'hover:bg-amber-50/30'
+                                                                          : 'hover:bg-purple-50/30'
+                                                            }`}
+                                                        >
+                                                            <td className="px-4 py-3 text-center">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    checked={isSelected}
+                                                                    onChange={() => handleToggleStudentSelect(st.id)}
+                                                                    className="size-4 rounded text-[#FF6B35] focus:ring-[#FF6B35]"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-3 font-bold text-gray-400">{idx + 1}</td>
+                                                            <td className="px-4 py-3 font-mono text-[11px] text-gray-600 dark:text-gray-300">
+                                                                {st.nisn} / {st.nis}
+                                                            </td>
+                                                            <td className="px-4 py-3 font-bold text-gray-900 dark:text-white">
+                                                                {st.name}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center">
+                                                                <span className={`font-black ${st.gender === 'L' ? 'text-[#0D9488]' : 'text-[#7C3AED]'}`}>
+                                                                    {st.gender}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSetStudentAction(st.id, 'promote')}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                                            isPromote
+                                                                                ? 'bg-emerald-600 text-white shadow-xs'
+                                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        Naik Kelas
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSetStudentAction(st.id, 'repeat')}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                                            isRepeat
+                                                                                ? 'bg-amber-500 text-white shadow-xs'
+                                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        Tinggal
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleSetStudentAction(st.id, 'graduate')}
+                                                                        className={`px-2 py-1 rounded-md text-[11px] font-bold transition-all ${
+                                                                            isGraduate
+                                                                                ? 'bg-purple-600 text-white shadow-xs'
+                                                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300'
+                                                                        }`}
+                                                                    >
+                                                                        Lulus
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                {isPromote ? (
+                                                                    <div className="flex items-center gap-2">
+                                                                        <select
+                                                                            value={decision.targetClassId || ''}
+                                                                            onChange={(e) => handleSetStudentTargetClass(st.id, e.target.value ? Number(e.target.value) : '')}
+                                                                            className={`rounded-lg border px-2.5 py-1 text-xs font-semibold focus:outline-none dark:bg-gray-800 dark:text-white ${
+                                                                                needsTarget
+                                                                                    ? 'border-red-500 bg-red-50/50 text-red-900 focus:border-red-600'
+                                                                                    : 'border-gray-300 bg-white focus:border-[#FF6B35]'
+                                                                            }`}
+                                                                        >
+                                                                            <option value="">-- Pilih Kelas Tujuan --</option>
+                                                                            {classrooms
+                                                                                .filter((c) => c.id !== Number(promoSourceClassId))
+                                                                                .map((c) => (
+                                                                                    <option key={c.id} value={c.id}>
+                                                                                        {c.name} ({c.academic_year})
+                                                                                    </option>
+                                                                                ))}
+                                                                        </select>
+                                                                        {needsTarget && (
+                                                                            <span className="text-[10px] font-bold text-red-500">
+                                                                                Wajib dipilih
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : isRepeat ? (
+                                                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-400">
+                                                                        Tetap di {promoSourceClass?.name}
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 dark:text-purple-400">
+                                                                        Lulus & Menjadi Alumni (Nonaktif)
+                                                                    </span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Footer Submit Bar */}
+                                {sourceStudents.length > 0 && (
+                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-5 bg-gray-50/60 dark:border-gray-800 dark:bg-gray-800/40">
+                                        <div className="text-xs text-gray-500">
+                                            Pastikan data kenaikan kelas sudah sesuai sebelum memproses ke database.
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <Button
+                                                type="button"
+                                                variant="primary"
+                                                onClick={() => setShowPromoConfirmModal(true)}
+                                                disabled={selectedStudentIds.length === 0 || promoSummary.invalidCount > 0 || isSubmittingPromo}
+                                                className="bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand font-bold text-xs gap-1.5 px-5 py-2.5"
+                                            >
+                                                <TrendingUp className="size-4" />
+                                                Proses Kenaikan Kelas ({selectedStudentIds.length} Siswa)
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center rounded-[20px] border-2 border-dashed border-gray-200 bg-white p-12 text-center dark:border-gray-800 dark:bg-[#18122B]">
+                                <div className="flex size-14 items-center justify-center rounded-2xl bg-orange-100 text-[#FF6B35] dark:bg-orange-950/60 dark:text-orange-300 mb-3">
+                                    <GraduationCap className="size-7" />
+                                </div>
+                                <h4 className="text-sm font-extrabold text-gray-900 dark:text-white">
+                                    Silakan Pilih Kelas Asal
+                                </h4>
+                                <p className="mt-1 text-xs text-gray-500 max-w-md">
+                                    Pilih kelas asal pada formulir di atas untuk memuat daftar siswa yang akan diproses kenaikan atau kelulusannya.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* MODAL KONFIRMASI KENAIKAN KELAS */}
+                        {showPromoConfirmModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                                <div className="relative w-full max-w-lg rounded-[22px] bg-white p-6 shadow-2xl dark:bg-[#18122B] border border-gray-200 dark:border-gray-800">
+                                    <div className="flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-800">
+                                        <h3 className="text-base font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
+                                            <AlertCircle className="size-5 text-[#FF6B35]" />
+                                            Konfirmasi Proses Kenaikan Kelas
+                                        </h3>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPromoConfirmModal(false)}
+                                            className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                        >
+                                            <X className="size-5" />
+                                        </button>
+                                    </div>
+
+                                    <div className="my-4 flex flex-col gap-3">
+                                        <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                                            Anda akan memproses mutasi / kenaikan kelas untuk <strong>{promoSummary.totalSelected} siswa</strong> dari kelas <strong>{promoSourceClass?.name}</strong> dengan rincian:
+                                        </p>
+
+                                        <div className="rounded-xl border border-gray-200 bg-gray-50/70 p-3.5 text-xs divide-y divide-gray-200/70 dark:border-gray-700 dark:bg-gray-800/50 dark:divide-gray-700">
+                                            <div className="flex items-center justify-between py-1.5 first:pt-0">
+                                                <span className="text-emerald-700 dark:text-emerald-400 font-bold">🟢 Naik Kelas:</span>
+                                                <span className="font-extrabold text-gray-900 dark:text-white">{promoSummary.promoteCount} Siswa</span>
+                                            </div>
+                                            <div className="flex items-center justify-between py-1.5">
+                                                <span className="text-amber-700 dark:text-amber-400 font-bold">🟡 Tinggal Kelas:</span>
+                                                <span className="font-extrabold text-gray-900 dark:text-white">{promoSummary.repeatCount} Siswa</span>
+                                            </div>
+                                            <div className="flex items-center justify-between py-1.5 last:pb-0">
+                                                <span className="text-purple-700 dark:text-purple-400 font-bold">🎓 Lulus / Alumni:</span>
+                                                <span className="font-extrabold text-gray-900 dark:text-white">{promoSummary.graduateCount} Siswa</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300">
+                                            ⚠️ <strong>Perhatian:</strong> Siswa yang naik kelas akan otomatis dipindahkan ke rombel kelas tujuan, dan siswa yang lulus akan dinonaktifkan dari daftar absensi aktif.
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-2 border-t border-gray-100 pt-3 dark:border-gray-800">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => setShowPromoConfirmModal(false)}
+                                            disabled={isSubmittingPromo}
+                                            className="text-xs font-bold"
+                                        >
+                                            Batal
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="primary"
+                                            size="sm"
+                                            disabled={isSubmittingPromo}
+                                            onClick={handleSubmitPromotions}
+                                            className="bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand font-bold text-xs"
+                                        >
+                                            {isSubmittingPromo ? 'Memproses...' : 'Ya, Proses Kenaikan Kelas'}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
                 {activeTab === 'teachers' && (
                     <div className="flex flex-col gap-6">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">

@@ -25,6 +25,8 @@ class HolidayController extends Controller
         ->orderBy('start_date')
         ->get();
 
+        $schoolSetting = \App\Models\SchoolSetting::getSetting();
+
         $stats = [
             'total_holidays' => $holidays->count(),
             'total_days' => $holidays->sum('duration_days'),
@@ -37,6 +39,10 @@ class HolidayController extends Controller
             'holidays' => $holidays,
             'selectedYear' => $selectedYear,
             'stats' => $stats,
+            'schoolSetting' => [
+                'school_days_per_week' => (int) ($schoolSetting->school_days_per_week ?? 6),
+                'is_saturday_holiday' => $schoolSetting->isSaturdayHoliday(),
+            ],
         ]);
     }
 
@@ -87,6 +93,27 @@ class HolidayController extends Controller
         $holiday->delete();
 
         return back()->with('success', "Hari libur '{$name}' berhasil dihapus dari kalender pendidikan.");
+    }
+
+    /**
+     * Update effective school days per week (5-day vs 6-day week).
+     */
+    public function updateSchoolDays(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'school_days_per_week' => 'required|integer|in:5,6',
+        ]);
+
+        $setting = \App\Models\SchoolSetting::getSetting();
+        $setting->update([
+            'school_days_per_week' => (int) $validated['school_days_per_week'],
+        ]);
+
+        $msg = (int) $validated['school_days_per_week'] === 5
+            ? 'Sistem 5 Hari Sekolah berhasil diterapkan (Hari Sabtu & Minggu libur, hari efektif: Senin - Jumat).'
+            : 'Sistem 6 Hari Sekolah berhasil diterapkan (Hari Sabtu aktif belajar, hanya Minggu yang libur).';
+
+        return back()->with('success', $msg);
     }
 
     /**

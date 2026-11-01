@@ -112,7 +112,7 @@ test('user can download attendance report as CSV', function () {
     ]));
 
     $response->assertOk();
-    $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+    $response->assertHeader('content-type', 'application/vnd.ms-excel; charset=UTF-8');
 });
 
 test('report includes indonesian day initials and gender statistics breakdown', function () {

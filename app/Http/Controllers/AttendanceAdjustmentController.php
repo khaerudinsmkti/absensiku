@@ -84,15 +84,7 @@ class AttendanceAdjustmentController extends Controller
         $classrooms = $classroomsQuery->get(['id', 'name']);
 
         $isFutureDate = $date > $today;
-        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
-        if (! $holiday && Carbon::parse($date)->isSunday()) {
-            $holiday = (object) [
-                'name' => 'Hari Minggu',
-                'type' => 'weekend',
-                'type_name' => 'Libur Akhir Pekan',
-                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
-            ];
-        }
+        $holiday = \App\Models\AcademicHoliday::getOffDay($date);
 
         return Inertia::render('attendances/adjustments', [
             'selectedDate' => $date,
@@ -129,10 +121,9 @@ class AttendanceAdjustmentController extends Controller
             return back()->with('error', 'Tidak dapat menginput absen khusus untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
         }
 
-        $holiday = \App\Models\AcademicHoliday::isHoliday($attendanceDate);
-        if ($holiday || Carbon::parse($attendanceDate)->isSunday()) {
-            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
-            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$holidayName}). Absen khusus tidak dapat diinput.");
+        $offDay = \App\Models\AcademicHoliday::getOffDay($attendanceDate);
+        if ($offDay) {
+            return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$offDay->name}). Absen khusus tidak dapat diinput.");
         }
 
         if ($request->user()->role === 'teacher') {

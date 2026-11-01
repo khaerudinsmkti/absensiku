@@ -19,16 +19,38 @@ class SchoolSetting extends Model
         'principal_name',
         'principal_nip',
         'start_time',
+        'school_days_per_week',
         'logo_path',
     ];
 
+    protected function casts(): array
+    {
+        return [
+            'school_days_per_week' => 'integer',
+        ];
+    }
+
     protected $appends = [
         'logo_url',
+        'is_saturday_holiday',
     ];
 
     public function getLogoUrlAttribute(): ?string
     {
         return $this->logo_path ? asset('storage/' . $this->logo_path) : null;
+    }
+
+    public function getIsSaturdayHolidayAttribute(): bool
+    {
+        return $this->isSaturdayHoliday();
+    }
+
+    /**
+     * Check if Saturday is treated as a weekend holiday (5-day school week).
+     */
+    public function isSaturdayHoliday(): bool
+    {
+        return (int) ($this->school_days_per_week ?? 6) === 5;
     }
 
     /**
@@ -46,8 +68,8 @@ class SchoolSetting extends Model
             'principal_name' => 'Drs. H. Mulyadi, M.Pd.',
             'principal_nip' => '197205121998031004',
             'start_time' => '07:00',
+            'school_days_per_week' => 6,
             'logo_path' => null,
         ]);
     }
 }
-

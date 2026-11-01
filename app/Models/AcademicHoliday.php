@@ -85,6 +85,56 @@ class AcademicHoliday extends Model
     }
 
     /**
+     * Check if Saturday is treated as a holiday in the school system.
+     */
+    public static function isSaturdayHoliday(): bool
+    {
+        return SchoolSetting::getSetting()->isSaturdayHoliday();
+    }
+
+    /**
+     * Get holiday or weekend off-day information for a specific date.
+     * Returns an object with holiday details, or null if it's an active school day.
+     */
+    public static function getOffDay(string|Carbon $date): ?object
+    {
+        $carbon = Carbon::parse($date);
+
+        $holiday = static::isHoliday($carbon);
+        if ($holiday) {
+            return (object) [
+                'name' => $holiday->name,
+                'type' => $holiday->type,
+                'type_name' => $holiday->type_name,
+                'description' => $holiday->description,
+                'is_weekend' => false,
+            ];
+        }
+
+        if ($carbon->isSunday()) {
+            return (object) [
+                'name' => 'Hari Minggu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan',
+                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
+                'is_weekend' => true,
+            ];
+        }
+
+        if ($carbon->isSaturday() && static::isSaturdayHoliday()) {
+            return (object) [
+                'name' => 'Hari Sabtu',
+                'type' => 'weekend',
+                'type_name' => 'Libur Akhir Pekan (5 Hari Sekolah)',
+                'description' => 'Hari Sabtu adalah hari libur akhir pekan (sistem 5 hari sekolah: Senin - Jumat).',
+                'is_weekend' => true,
+            ];
+        }
+
+        return null;
+    }
+
+    /**
      * Get an associative array of all holiday dates within the given range:
      * ['2026-08-17' => ['name' => 'Hari Kemerdekaan RI', 'type' => 'national_holiday', ...], ...]
      */

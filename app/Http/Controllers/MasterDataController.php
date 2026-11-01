@@ -21,7 +21,10 @@ class MasterDataController extends Controller
      */
     public function index(Request $request): Response
     {
-        $classrooms = Classroom::with(['homeroomTeacher', 'students'])->orderBy('name')->get();
+        $classrooms = Classroom::with([
+            'homeroomTeacher',
+            'students' => fn ($q) => $q->where('is_active', true)->orderBy('name'),
+        ])->withCount('students')->orderBy('name')->get();
         $selectedClassroomId = $request->input('classroom_id');
         $search = $request->input('search');
 
@@ -541,5 +544,69 @@ class MasterDataController extends Controller
         $dutySchedule->delete();
 
         return back()->with('success', 'Jadwal piket guru berhasil dihapus.');
+    }
+
+    /**
+     * Process grade promotions, repeat grade, and graduation for students
+     */
+    public function processPromotions(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'source_classroom_id' => 'required|exists:classrooms,id',
+            'promotions' => 'required|array|min:1',
+            'promotions.*.student_id' => 'required|exists:students,id',
+            'promotions.*.action' => 'required|in:promote,repeat,graduate',
+            'promotions.*.target_classroom_id' => 'nullable|exists:classrooms,id',
+        ]);
+
+        $promotedCount = 0;
+        $repeatedCount = 0;
+        $graduatedCount = 0;
+
+        DB::transaction(function () use ($validated, &$promotedCount, &$repeatedCount, &$graduatedCount) {
+            foreach ($validated['promotions'] as $item) {
+                $student = Student::findOrFail($item['student_id']);
+                $action = $item['action'];
+
+                if ($action === 'promote') {
+                    if (empty($item['target_classroom_id'])) {
+                        continue;
+                    }
+                    $student->update([
+                        'classroom_id' => $item['target_classroom_id'],
+                        'is_active' => true,
+                    ]);
+                    $promotedCount++;
+                } elseif ($action === 'repeat') {
+                    if (! empty($item['target_classroom_id'])) {
+                        $student->update([
+                            'classroom_id' => $item['target_classroom_id'],
+                            'is_active' => true,
+                        ]);
+                    }
+                    $repeatedCount++;
+                } elseif ($action === 'graduate') {
+                    $student->update([
+                        'is_active' => false,
+                    ]);
+                    $graduatedCount++;
+                }
+            }
+        });
+
+        $msgParts = [];
+        if ($promotedCount > 0) {
+            $msgParts[] = "{$promotedCount} siswa naik kelas";
+        }
+        if ($repeatedCount > 0) {
+            $msgParts[] = "{$repeatedCount} siswa tinggal kelas";
+        }
+        if ($graduatedCount > 0) {
+            $msgParts[] = "{$graduatedCount} siswa dinyatakan lulus / alumni";
+        }
+
+        $summary = count($msgParts) > 0 ? implode(', ', $msgParts) : 'Tidak ada perubahan';
+
+        return back()->with('success', "Proses kenaikan kelas berhasil disimpan ({$summary}).");
     }
 }

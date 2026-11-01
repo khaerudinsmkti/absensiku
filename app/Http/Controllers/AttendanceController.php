@@ -77,15 +77,7 @@ class AttendanceController extends Controller
 
         $today = Carbon::today()->toDateString();
         $isFutureDate = $date > $today;
-        $holiday = \App\Models\AcademicHoliday::isHoliday($date);
-        if (! $holiday && Carbon::parse($date)->isSunday()) {
-            $holiday = (object) [
-                'name' => 'Hari Minggu',
-                'type' => 'weekend',
-                'type_name' => 'Libur Akhir Pekan',
-                'description' => 'Hari Minggu adalah hari libur akhir pekan sekolah.',
-            ];
-        }
+        $holiday = \App\Models\AcademicHoliday::getOffDay($date);
 
         return Inertia::render('attendances/index', [
             'classrooms' => $classrooms,
@@ -122,10 +114,9 @@ class AttendanceController extends Controller
             return back()->with('error', 'Tidak dapat menginput data presensi untuk tanggal di masa mendatang (tanggal tidak boleh melebihi hari ini).');
         }
 
-        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
-        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
-            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
-            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Presensi tidak dapat diinput.");
+        $offDay = \App\Models\AcademicHoliday::getOffDay($validated['date']);
+        if ($offDay) {
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Presensi tidak dapat diinput.");
         }
 
         if ($request->user()->role === 'teacher') {
@@ -175,10 +166,9 @@ class AttendanceController extends Controller
             return back()->with('error', 'Tidak dapat memperbarui presensi untuk tanggal di masa mendatang.');
         }
 
-        $holiday = \App\Models\AcademicHoliday::isHoliday($validated['date']);
-        if ($holiday || Carbon::parse($validated['date'])->isSunday()) {
-            $holidayName = $holiday ? $holiday->name : 'Hari Minggu';
-            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$holidayName}). Presensi tidak dapat diinput.");
+        $offDay = \App\Models\AcademicHoliday::getOffDay($validated['date']);
+        if ($offDay) {
+            return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Presensi tidak dapat diinput.");
         }
 
         if ($request->user()->role === 'teacher') {

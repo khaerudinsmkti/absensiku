@@ -2,6 +2,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import {
     Calendar,
     CalendarRange,
+    Clock,
     Download,
     FileDown,
     FileSpreadsheet,
@@ -195,7 +196,7 @@ export default function ReportsPage({
                                 </a>
                             </Button>
 
-                            {/* Export CSV / Excel Button */}
+                            {/* Export Excel Button */}
                             <Button
                                 asChild
                                 variant="secondary"
@@ -203,7 +204,7 @@ export default function ReportsPage({
                             >
                                 <a href={`/reports/export?${exportQueryParams}`}>
                                     <FileSpreadsheet className="size-4" />
-                                    Ekspor CSV
+                                    Ekspor Excel
                                 </a>
                             </Button>
 
@@ -438,7 +439,7 @@ export default function ReportsPage({
                 )}
 
                 {/* Summary Stat Cards */}
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-3 2xl:grid-cols-6">
                     <StatCard
                         title="Total Siswa"
                         value={summary?.total_students || 0}
@@ -470,10 +471,10 @@ export default function ReportsPage({
                         variant="danger"
                     />
                     <StatCard
-                        title="Terlambat"
+                        title="Total Terlambat"
                         value={summary?.total_terlambat || 0}
-                        icon={Percent}
-                        variant="warning"
+                        icon={Clock}
+                        variant="purple"
                     />
                 </div>
 

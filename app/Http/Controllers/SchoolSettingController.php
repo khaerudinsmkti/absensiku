@@ -38,6 +38,7 @@ class SchoolSettingController extends Controller
             'principal_name' => 'nullable|string|max:255',
             'principal_nip' => 'nullable|string|max:50',
             'start_time' => 'required|string|max:10',
+            'school_days_per_week' => 'nullable|integer|in:5,6',
             'logo' => 'nullable|image|mimes:jpeg,png,jpg,webp,svg|max:2048',
             'remove_logo' => 'nullable|boolean',
         ]);

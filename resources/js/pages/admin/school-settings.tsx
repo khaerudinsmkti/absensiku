@@ -31,6 +31,7 @@ interface SchoolSetting {
     principal_name: string | null;
     principal_nip: string | null;
     start_time: string;
+    school_days_per_week?: number;
     logo_path: string | null;
     logo_url: string | null;
 }
@@ -54,6 +55,7 @@ export default function SchoolSettingsPage({ setting }: PageProps) {
         principal_name: setting.principal_name || '',
         principal_nip: setting.principal_nip || '',
         start_time: setting.start_time ? setting.start_time.substring(0, 5) : '07:00',
+        school_days_per_week: setting.school_days_per_week ?? 6,
         logo: null as File | null,
         remove_logo: false,
     });
@@ -334,6 +336,63 @@ export default function SchoolSettingsPage({ setting }: PageProps) {
                                         <p className="font-semibold leading-relaxed">
                                             💡 Siswa yang dicatat tiba setelah pukul <span className="font-bold underline">{data.start_time || '07:00'}</span> akan otomatis dikalkulasikan durasi keterlambatannya (dalam menit) pada Modul Keterlambatan Siswa.
                                         </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
+                                    <label className="mb-1.5 block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300">
+                                        Sistem Hari Sekolah (Hari Efektif Mingguan) <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <label
+                                            className={`flex items-start gap-3 rounded-xl border-2 p-3.5 cursor-pointer transition-all ${
+                                                Number(data.school_days_per_week) === 5
+                                                    ? 'border-[#FF6B35] bg-orange-50/40 dark:bg-[#251B38]'
+                                                    : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="school_days_per_week"
+                                                value={5}
+                                                checked={Number(data.school_days_per_week) === 5}
+                                                onChange={() => setData('school_days_per_week', 5)}
+                                                className="mt-0.5 text-[#FF6B35] focus:ring-[#FF6B35]"
+                                            />
+                                            <div>
+                                                <div className="text-xs font-black text-gray-900 dark:text-white">
+                                                    5 Hari Sekolah (Senin - Jumat)
+                                                </div>
+                                                <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    Hari Sabtu & Minggu libur akhir pekan. Hari efektif belajar: 5 hari.
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        <label
+                                            className={`flex items-start gap-3 rounded-xl border-2 p-3.5 cursor-pointer transition-all ${
+                                                Number(data.school_days_per_week) === 6
+                                                    ? 'border-[#FF6B35] bg-orange-50/40 dark:bg-[#251B38]'
+                                                    : 'border-gray-200 hover:border-gray-300 dark:border-gray-700'
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="school_days_per_week"
+                                                value={6}
+                                                checked={Number(data.school_days_per_week) === 6}
+                                                onChange={() => setData('school_days_per_week', 6)}
+                                                className="mt-0.5 text-[#FF6B35] focus:ring-[#FF6B35]"
+                                            />
+                                            <div>
+                                                <div className="text-xs font-black text-gray-900 dark:text-white">
+                                                    6 Hari Sekolah (Senin - Sabtu)
+                                                </div>
+                                                <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                                    Hari Sabtu aktif masuk sekolah. Hanya hari Minggu yang libur.
+                                                </div>
+                                            </div>
+                                        </label>
                                     </div>
                                 </div>
                             </div>

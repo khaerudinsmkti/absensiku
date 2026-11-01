@@ -4,7 +4,12 @@ use App\Models\Attendance;
 use App\Models\Classroom;
 use App\Models\Student;
 use App\Models\User;
+use Carbon\Carbon;
 use Inertia\Testing\AssertableInertia as Assert;
+
+beforeEach(function () {
+    Carbon::setTestNow('2026-10-28 08:00:00');
+});
 
 test('teacher only sees students from their assigned classroom in lateness form', function () {
     $teacher1 = User::factory()->create(['role' => 'teacher']);

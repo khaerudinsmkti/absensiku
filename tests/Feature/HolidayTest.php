@@ -165,3 +165,87 @@ test('holiday dates are excluded from attendance effective school days and marke
             ->where('students.0.daily_attendances.15.status', 'holiday');
     });
 });
+
+test('admin can switch school days to 5 days week and 6 days week', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+
+    $response = $this->actingAs($admin)->patch(route('holidays.school-days'), [
+        'school_days_per_week' => 5,
+    ]);
+
+    $response->assertRedirect();
+    $setting = \App\Models\SchoolSetting::getSetting();
+    expect($setting->school_days_per_week)->toBe(5);
+    expect($setting->isSaturdayHoliday())->toBeTrue();
+
+    // Switch back to 6 days
+    $response6 = $this->actingAs($admin)->patch(route('holidays.school-days'), [
+        'school_days_per_week' => 6,
+    ]);
+
+    $response6->assertRedirect();
+    $setting->refresh();
+    expect($setting->school_days_per_week)->toBe(6);
+    expect($setting->isSaturdayHoliday())->toBeFalse();
+});
+
+test('saturday is recognized as off day when 5 days week is active', function () {
+    $setting = \App\Models\SchoolSetting::getSetting();
+    $setting->update(['school_days_per_week' => 5]);
+
+    // 2026-10-31 is Saturday
+    $saturday = '2026-10-31';
+    $offDay = AcademicHoliday::getOffDay($saturday);
+
+    expect($offDay)->not->toBeNull();
+    expect($offDay->name)->toBe('Hari Sabtu');
+    expect($offDay->is_weekend)->toBeTrue();
+
+    // If 6 days week is active, Saturday is active school day
+    $setting->update(['school_days_per_week' => 6]);
+    $offDay6 = AcademicHoliday::getOffDay($saturday);
+    expect($offDay6)->toBeNull();
+});
+
+test('batch attendance cannot be submitted on saturday when 5 days week is active', function () {
+    $admin = User::factory()->create(['role' => 'admin']);
+    $setting = \App\Models\SchoolSetting::getSetting();
+    $setting->update(['school_days_per_week' => 5]);
+
+    $classroom = Classroom::create([
+        'name' => 'Kelas X-SatTest',
+        'academic_year' => '2025/2026',
+        'homeroom_teacher_id' => $admin->id,
+    ]);
+
+    $student = Student::create([
+        'classroom_id' => $classroom->id,
+        'name' => 'Siswa Sabtu Libur',
+        'nisn' => '1122334455',
+        'nis' => '8001',
+        'gender' => 'L',
+        'is_active' => true,
+    ]);
+
+    // Saturday 2026-10-24
+    $saturdayDate = '2026-10-24';
+
+    $response = $this->actingAs($admin)
+        ->post(route('attendances.batch'), [
+            'classroom_id' => $classroom->id,
+            'date' => $saturdayDate,
+            'attendances' => [
+                [
+                    'student_id' => $student->id,
+                    'status' => 'present',
+                ],
+            ],
+        ]);
+
+    $response->assertRedirect();
+    $response->assertSessionHas('error');
+    $this->assertDatabaseMissing('attendances', [
+        'student_id' => $student->id,
+        'date' => $saturdayDate,
+    ]);
+});

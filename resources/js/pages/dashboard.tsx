@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import {
     Activity,
     AlertCircle,
@@ -10,17 +10,10 @@ import {
     CheckCircle2,
     Clock,
     Download,
-    FileSpreadsheet,
     FileText,
-    UserCheck,
-    Users,
     UserX,
-    XCircle,
 } from 'lucide-react';
-import { AttendanceBadge, type AttendanceStatus } from '@/components/attendance-badge';
-import { AttendanceRadioGroup } from '@/components/attendance-radio-group';
 import { PageBanner } from '@/components/page-banner';
-import { StatCard } from '@/components/stat-card';
 import { Button } from '@/components/ui/button';
 import type { ClassroomData, StudentAttendanceRow } from '@/types/attendance';
 
@@ -51,8 +44,8 @@ export interface TopStudentItem {
 }
 
 interface DashboardProps {
-    classrooms: ClassroomData[];
-    selectedClassroomId: number;
+    classrooms?: ClassroomData[];
+    selectedClassroomId?: number;
     selectedDate: string;
     isFutureDate?: boolean;
     holiday?: {
@@ -81,11 +74,10 @@ interface DashboardProps {
             alpha: TopStudentItem[];
         };
     };
-    students: StudentAttendanceRow[];
+    students?: StudentAttendanceRow[];
 }
 
 export default function Dashboard({
-    classrooms = [],
     selectedClassroomId,
     selectedDate,
     isFutureDate = false,
@@ -93,19 +85,11 @@ export default function Dashboard({
     stats,
     recap,
     top_students,
-    students = [],
 }: DashboardProps) {
     const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
     const isFuture = isFutureDate || selectedDate > todayStr;
-    const isBlocked = !!holiday || isFuture;
 
-    const [recapPeriod, setRecapPeriod] = useState<'daily' | 'monthly' | 'yearly'>('daily');
     const [topPeriod, setTopPeriod] = useState<'yearly' | 'monthly'>('yearly');
-
-    const activeRecap: AttendanceRecapItem = useMemo(() => {
-        if (!recap) return stats;
-        return recap[recapPeriod] ?? stats;
-    }, [recap, recapPeriod, stats]);
 
     const currentTopData = useMemo(() => {
         if (!top_students) {
@@ -113,49 +97,6 @@ export default function Dashboard({
         }
         return top_students[topPeriod] ?? { terlambat: [], sakit: [], izin: [], alpha: [] };
     }, [top_students, topPeriod]);
-
-    const handleClassChange = (newClassId: string) => {
-        router.get(
-            '/dashboard',
-            {
-                classroom_id: newClassId,
-                date: selectedDate,
-            },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
-    const handleDateChange = (newDate: string) => {
-        router.get(
-            '/dashboard',
-            {
-                classroom_id: selectedClassroomId,
-                date: newDate,
-            },
-            { preserveState: true, preserveScroll: true },
-        );
-    };
-
-    const handleQuickStatusChange = (studentId: number, status: AttendanceStatus) => {
-        if (isBlocked) return;
-
-        const mappedStatus = status === 'hadir' ? 'present'
-            : status === 'sakit' ? 'sick'
-            : status === 'izin' ? 'permit'
-            : status === 'alpha' ? 'absent'
-            : 'present';
-
-        router.patch(
-            `/attendances/student/${studentId}`,
-            {
-                date: selectedDate,
-                status: mappedStatus,
-            },
-            { preserveScroll: true },
-        );
-    };
-
-    const currentClassroom = classrooms.find((c) => c.id === selectedClassroomId);
 
     const renderTopCard = ({
         title,
@@ -267,6 +208,10 @@ export default function Dashboard({
         );
     };
 
+    const exportUrl = selectedClassroomId
+        ? `/reports/export?classroom_id=${selectedClassroomId}&start_date=${selectedDate}&end_date=${selectedDate}`
+        : `/reports/export?start_date=${selectedDate}&end_date=${selectedDate}`;
+
     return (
         <>
             <Head title="Dashboard - AbsensiKu" />
@@ -283,9 +228,9 @@ export default function Dashboard({
                                 variant="secondary"
                                 className="bg-white text-[#FF6B35] hover:bg-[#FFFBE6] shadow-sm font-bold border-none"
                             >
-                                <a href={`/reports/export?classroom_id=${selectedClassroomId}&start_date=${selectedDate}&end_date=${selectedDate}`}>
+                                <a href={exportUrl}>
                                     <Download className="size-4 mr-1.5" />
-                                    Export Rekap CSV
+                                    Export Rekap Excel
                                 </a>
                             </Button>
                         </div>
@@ -332,144 +277,65 @@ export default function Dashboard({
 
                 {/* 2. Rekapan Status Kehadiran (Harian, Bulanan, Tahunan) */}
                 <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-lg font-bold text-[#111827] dark:text-white">
-                                    Rekap Status Kehadiran
-                                </h2>
-                                <span className="rounded-full bg-[#FFF4ED] px-2.5 py-0.5 text-xs font-semibold text-[#FF6B35] dark:bg-[#3D2520] dark:text-[#FFA07A]">
-                                    {activeRecap.sublabel}
-                                </span>
-                            </div>
-                            <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                                Ringkasan akumulasi kehadiran siswa berdasarkan rentang waktu harian, bulanan, dan tahunan.
-                            </p>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-bold text-[#111827] dark:text-white">
+                                Rekap Status Kehadiran
+                            </h2>
+                            <span className="rounded-full bg-[#FFF4ED] px-2.5 py-0.5 text-xs font-semibold text-[#FF6B35] dark:bg-[#3D2520] dark:text-[#FFA07A]">
+                                Harian, Bulanan & Tahunan
+                            </span>
                         </div>
-
-                        {/* Segmented Controls for Recap Period */}
-                        <div className="inline-flex rounded-xl bg-gray-100 p-1 dark:bg-[#1E1735] self-start sm:self-auto border border-gray-200/60 dark:border-gray-800">
-                            <button
-                                type="button"
-                                onClick={() => setRecapPeriod('daily')}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                                    recapPeriod === 'daily'
-                                        ? 'bg-white text-[#FF6B35] shadow-sm dark:bg-[#2A2045] dark:text-[#FFA07A]'
-                                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                                }`}
-                            >
-                                <Calendar className="size-3.5" />
-                                Harian
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setRecapPeriod('monthly')}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                                    recapPeriod === 'monthly'
-                                        ? 'bg-white text-[#FF6B35] shadow-sm dark:bg-[#2A2045] dark:text-[#FFA07A]'
-                                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                                }`}
-                            >
-                                <CalendarRange className="size-3.5" />
-                                Bulanan
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setRecapPeriod('yearly')}
-                                className={`flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
-                                    recapPeriod === 'yearly'
-                                        ? 'bg-white text-[#FF6B35] shadow-sm dark:bg-[#2A2045] dark:text-[#FFA07A]'
-                                        : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
-                                }`}
-                            >
-                                <Award className="size-3.5" />
-                                Tahunan
-                            </button>
-                        </div>
+                        <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
+                            Ringkasan akumulasi kehadiran siswa berdasarkan rentang waktu harian, bulanan, dan tahunan.
+                        </p>
                     </div>
 
-                    {/* Stats Grid */}
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        <StatCard
-                            title="Tingkat Kehadiran"
-                            value={`${activeRecap.attendance_rate}%`}
-                            subtitle={
-                                activeRecap.period === 'daily'
-                                    ? `${activeRecap.total_hadir} dari ${activeRecap.total_students} siswa hadir`
-                                    : `${activeRecap.total_hadir} dari ${activeRecap.total_records} catatan presensi`
-                            }
-                            icon={CheckCircle2}
-                            variant="success"
-                            trend={{ label: `${activeRecap.total_hadir} Hadir`, isPositive: true }}
-                        />
-                        <StatCard
-                            title="Sakit & Izin"
-                            value={activeRecap.total_sakit + activeRecap.total_izin}
-                            subtitle={`${activeRecap.total_sakit} Sakit, ${activeRecap.total_izin} Izin Resmi`}
-                            icon={AlertCircle}
-                            variant="warning"
-                        />
-                        <StatCard
-                            title="Keterlambatan"
-                            value={activeRecap.total_terlambat}
-                            subtitle={`Tercatat terlambat (${activeRecap.sublabel})`}
-                            icon={Clock}
-                            variant="purple"
-                        />
-                        <StatCard
-                            title="Alpha & Tanpa Ket."
-                            value={activeRecap.total_alpha}
-                            subtitle={activeRecap.total_adjustments > 0 ? `${activeRecap.total_adjustments} Pulang Awal` : 'Perlu perhatian wali'}
-                            icon={XCircle}
-                            variant="danger"
-                            trend={activeRecap.total_alpha > 0 ? { label: 'Perlu Cek', isPositive: false } : undefined}
-                        />
-                    </div>
-
-                    {/* Mini Comparison Summary Cards */}
+                    {/* Summary Comparison Cards (Harian, Bulanan, Tahunan) */}
                     {recap && (
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {(['daily', 'monthly', 'yearly'] as const).map((pKey) => {
                                 const item = recap[pKey];
-                                const isSelected = recapPeriod === pKey;
                                 return (
                                     <div
                                         key={pKey}
-                                        onClick={() => setRecapPeriod(pKey)}
-                                        className={`cursor-pointer rounded-2xl border-2 p-4 transition-all duration-200 ${
-                                            isSelected
-                                                ? 'border-[#FF6B35] bg-[#FFF8F5] shadow-sm dark:border-[#FF6B35] dark:bg-[#2A1D2D]'
-                                                : 'border-gray-200/80 bg-white hover:border-gray-300 dark:border-[#2D234A] dark:bg-[#18122B] dark:hover:border-gray-700'
-                                        }`}
+                                        className="rounded-2xl border-2 border-gray-200/80 bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]"
                                     >
-                                        <div className="flex items-center justify-between mb-2">
-                                            <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                                                {item.label} • <span className="text-gray-700 dark:text-gray-200">{item.sublabel}</span>
-                                            </span>
-                                            <span className="text-xs font-extrabold text-[#0D9488]">
-                                                {item.attendance_rate}% Hadir
-                                            </span>
+                                        <div className="flex items-center justify-between mb-3.5 border-b border-gray-100 pb-3 dark:border-gray-800">
+                                            <div>
+                                                <span className="text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
+                                                    {item.label}
+                                                </span>
+                                                <div className="text-sm font-extrabold text-gray-900 dark:text-white mt-0.5">
+                                                    {item.sublabel}
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-black text-[#0D9488] dark:bg-emerald-950/60 dark:text-emerald-300">
+                                                    {item.attendance_rate}% Hadir
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div className="grid grid-cols-5 gap-1.5 text-center text-xs">
-                                            <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 p-1.5">
-                                                <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">Hadir</div>
-                                                <div className="font-extrabold text-emerald-800 dark:text-emerald-300">{item.total_hadir}</div>
+                                        <div className="grid grid-cols-5 gap-2 text-center text-xs">
+                                            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-2">
+                                                <div className="text-[10px] text-emerald-700 dark:text-emerald-400 font-bold uppercase">Hadir</div>
+                                                <div className="text-sm font-black text-emerald-800 dark:text-emerald-300 mt-0.5">{item.total_hadir}</div>
                                             </div>
-                                            <div className="rounded-lg bg-amber-50 dark:bg-amber-950/40 p-1.5">
-                                                <div className="text-[10px] text-amber-700 dark:text-amber-400 font-medium">Sakit</div>
-                                                <div className="font-extrabold text-amber-800 dark:text-amber-300">{item.total_sakit}</div>
+                                            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/40 p-2">
+                                                <div className="text-[10px] text-amber-700 dark:text-amber-400 font-bold uppercase">Sakit</div>
+                                                <div className="text-sm font-black text-amber-800 dark:text-amber-300 mt-0.5">{item.total_sakit}</div>
                                             </div>
-                                            <div className="rounded-lg bg-blue-50 dark:bg-blue-950/40 p-1.5">
-                                                <div className="text-[10px] text-blue-700 dark:text-blue-400 font-medium">Izin</div>
-                                                <div className="font-extrabold text-blue-800 dark:text-blue-300">{item.total_izin}</div>
+                                            <div className="rounded-xl bg-blue-50 dark:bg-blue-950/40 p-2">
+                                                <div className="text-[10px] text-blue-700 dark:text-blue-400 font-bold uppercase">Izin</div>
+                                                <div className="text-sm font-black text-blue-800 dark:text-blue-300 mt-0.5">{item.total_izin}</div>
                                             </div>
-                                            <div className="rounded-lg bg-rose-50 dark:bg-rose-950/40 p-1.5">
-                                                <div className="text-[10px] text-rose-700 dark:text-rose-400 font-medium">Alpa</div>
-                                                <div className="font-extrabold text-rose-800 dark:text-rose-300">{item.total_alpha}</div>
+                                            <div className="rounded-xl bg-rose-50 dark:bg-rose-950/40 p-2">
+                                                <div className="text-[10px] text-rose-700 dark:text-rose-400 font-bold uppercase">Alpa</div>
+                                                <div className="text-sm font-black text-rose-800 dark:text-rose-300 mt-0.5">{item.total_alpha}</div>
                                             </div>
-                                            <div className="rounded-lg bg-purple-50 dark:bg-purple-950/40 p-1.5">
-                                                <div className="text-[10px] text-purple-700 dark:text-purple-400 font-medium">Telat</div>
-                                                <div className="font-extrabold text-purple-800 dark:text-purple-300">{item.total_terlambat}</div>
+                                            <div className="rounded-xl bg-purple-50 dark:bg-purple-950/40 p-2">
+                                                <div className="text-[10px] text-purple-700 dark:text-purple-400 font-bold uppercase">Telat</div>
+                                                <div className="text-sm font-black text-purple-800 dark:text-purple-300 mt-0.5">{item.total_terlambat}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -527,7 +393,7 @@ export default function Dashboard({
                     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {/* 1. Telat */}
                         {renderTopCard({
-                            title: 'Paling Banyak Telat',
+                            title: 'Terbanyak Telat',
                             subtitle: `Siswa terlambat (${topPeriod === 'monthly' ? 'Bulan Ini' : 'Tahun Ini'})`,
                             icon: Clock,
                             accentColor: 'purple',
@@ -538,7 +404,7 @@ export default function Dashboard({
 
                         {/* 2. Sakit */}
                         {renderTopCard({
-                            title: 'Paling Banyak Sakit',
+                            title: 'Terbanyak Sakit',
                             subtitle: `Siswa sakit (${topPeriod === 'monthly' ? 'Bulan Ini' : 'Tahun Ini'})`,
                             icon: Activity,
                             accentColor: 'amber',
@@ -548,7 +414,7 @@ export default function Dashboard({
 
                         {/* 3. Izin */}
                         {renderTopCard({
-                            title: 'Paling Banyak Izin',
+                            title: 'Terbanyak Izin',
                             subtitle: `Siswa izin (${topPeriod === 'monthly' ? 'Bulan Ini' : 'Tahun Ini'})`,
                             icon: FileText,
                             accentColor: 'blue',
@@ -558,194 +424,13 @@ export default function Dashboard({
 
                         {/* 4. Alpha */}
                         {renderTopCard({
-                            title: 'Paling Banyak Alpa',
+                            title: 'Terbanyak Alpa',
                             subtitle: `Siswa tanpa ket. (${topPeriod === 'monthly' ? 'Bulan Ini' : 'Tahun Ini'})`,
                             icon: UserX,
                             accentColor: 'rose',
                             items: currentTopData.alpha,
                             badgeSuffix: 'x Alpa',
                         })}
-                    </div>
-                </div>
-
-                {/* 4. Filter Bar */}
-                <div className="flex flex-col gap-4 rounded-[18px] border-2 border-[#E8E8E8] bg-white p-5 shadow-[0_2px_8px_rgba(0,0,0,0.03)] sm:flex-row sm:items-center sm:justify-between dark:border-[#2D234A] dark:bg-[#18122B]">
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-[#6B7280] uppercase tracking-wider dark:text-[#9CA3AF]">
-                                Kelas:
-                            </span>
-                            <select
-                                value={selectedClassroomId || ''}
-                                onChange={(e) => handleClassChange(e.target.value)}
-                                className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3.5 py-1.5 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white cursor-pointer"
-                            >
-                                {classrooms.length === 0 && (
-                                    <option value="">Belum ada kelas yang diampu</option>
-                                )}
-                                {classrooms.map((cls) => (
-                                    <option key={cls.id} value={cls.id}>
-                                        {cls.name} {cls.homeroom_teacher ? `(Wali: ${cls.homeroom_teacher.name})` : ''}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-[#6B7280] uppercase tracking-wider dark:text-[#9CA3AF]">
-                                Tanggal:
-                            </span>
-                            <input
-                                type="date"
-                                max={todayStr}
-                                value={selectedDate}
-                                onChange={(e) => handleDateChange(e.target.value)}
-                                className="rounded-xl border-2 border-[#E8E8E8] bg-white px-3 py-1.5 text-sm font-semibold text-[#1F2937] focus:border-[#FF6B35] focus:ring-4 focus:ring-[#FF6B35]/12 outline-none dark:border-[#2D234A] dark:bg-[#18122B] dark:text-white"
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <Button
-                            asChild
-                            variant="primary"
-                            size="sm"
-                            className="font-semibold text-xs bg-gradient-to-r from-[#FF6B35] to-[#FF8C5A] text-white shadow-brand"
-                        >
-                            <a href={`/attendances?classroom_id=${selectedClassroomId}&date=${selectedDate}`}>
-                                <UserCheck className="size-4 mr-1.5" />
-                                Buka Presensi Massal
-                            </a>
-                        </Button>
-                    </div>
-                </div>
-
-                {/* 4. Data Table */}
-                <div className="overflow-hidden rounded-[18px] border-2 border-[#E8E8E8] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.03)] dark:border-[#2D234A] dark:bg-[#18122B]">
-                    <div className="flex items-center justify-between border-b border-[#E8E8E8] px-6 py-4 dark:border-[#2D234A]">
-                        <div>
-                            <h2 className="text-base font-bold text-[#111827] dark:text-white">
-                                Presensi Siswa: {currentClassroom?.name ?? 'Pilih Kelas'}
-                            </h2>
-                            <p className="text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                                Klik opsi status untuk memperbarui catatan kehadiran dengan cepat (otomatis tersimpan).
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-[#E8FAF9] px-3 py-1 text-xs font-bold text-[#0D9488] dark:bg-[#113835] dark:text-[#5EEAD4]">
-                                {students.length} Siswa Terdaftar
-                            </span>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-sm">
-                            <thead>
-                                <tr className="bg-table-header border-b-2 border-[#FFD4C2] dark:border-[#3D2520]">
-                                    <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        No
-                                    </th>
-                                    <th className="hidden sm:table-cell px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        NISN / NIS
-                                    </th>
-                                    <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        Nama Peserta Didik
-                                    </th>
-                                    <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        L/P
-                                    </th>
-                                    <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        Waktu Presensi
-                                    </th>
-                                    <th className="px-5 py-3.5 text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        Status Kehadiran
-                                    </th>
-                                    <th className="px-5 py-3.5 text-center text-xs font-bold uppercase tracking-wider text-[#FF6B35]">
-                                        Aksi Cepat
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#F5F5F5] dark:divide-[#231A3A]">
-                                {students.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7} className="text-center py-10 text-gray-500 font-medium">
-                                            Belum ada data siswa untuk kelas ini.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    students.map((student, idx) => (
-                                        <tr
-                                            key={student.id}
-                                            className="transition-colors hover:bg-gradient-to-r hover:from-[#FFF8F5] hover:to-[#F0FFFE] dark:hover:from-[#211636] dark:hover:to-[#172433]"
-                                        >
-                                            <td className="px-5 py-3.5 font-bold text-[#6B7280]">
-                                                {idx + 1}
-                                            </td>
-                                            <td className="hidden sm:table-cell px-5 py-3.5 font-mono text-xs text-[#6B7280] dark:text-[#9CA3AF]">
-                                                <div>{student.nisn}</div>
-                                                <div className="text-[11px] text-gray-400">NIS: {student.nis}</div>
-                                            </td>
-                                            <td className="px-5 py-3.5 font-bold text-[#1F2937] dark:text-white">
-                                                <div>{student.name}</div>
-                                                <div className="text-[11px] font-normal text-gray-400 font-mono sm:hidden">
-                                                    NISN: {student.nisn}
-                                                </div>
-                                                {student.adjustment && (
-                                                    <div className="mt-1 inline-flex items-center gap-1 rounded bg-[#CCFBF1] px-2 py-0.5 text-[10px] font-bold text-[#0F766E]">
-                                                        {student.adjustment.type_name} ({student.adjustment.departure_time})
-                                                    </div>
-                                                )}
-                                                {student.notes && !student.adjustment && (
-                                                    <div className="text-[11px] text-gray-500 font-normal mt-0.5">
-                                                        {student.notes}
-                                                    </div>
-                                                )}
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <span
-                                                    className={`inline-flex size-6 items-center justify-center rounded-md text-xs font-bold ${
-                                                        student.gender === 'L'
-                                                            ? 'bg-[#E8FAF9] text-[#0D9488]'
-                                                            : 'bg-[#EDE9FE] text-[#7C3AED]'
-                                                    }`}
-                                                >
-                                                    {student.gender}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-3.5 text-xs font-medium text-[#6B7280]">
-                                                {student.is_late ? (
-                                                    <span className="font-bold text-[#7C3AED]">
-                                                        {student.check_in_time} (+{student.late_minutes}m)
-                                                    </span>
-                                                ) : (
-                                                    student.check_in_time || '-'
-                                                )}
-                                            </td>
-                                            <td className="px-5 py-3.5">
-                                                <AttendanceBadge
-                                                    status={student.status as AttendanceStatus}
-                                                />
-                                            </td>
-                                            <td className="px-5 py-3.5 text-center">
-                                                <AttendanceRadioGroup
-                                                    name={`att-${student.id}`}
-                                                    value={
-                                                        student.status === 'terlambat' ? 'hadir' :
-                                                        student.status === 'khusus' ? 'hadir' :
-                                                        student.status as AttendanceStatus
-                                                    }
-                                                    compact
-                                                    disabled={isBlocked}
-                                                    onChange={(val) =>
-                                                        handleQuickStatusChange(student.id, val)
-                                                    }
-                                                />
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
                     </div>
                 </div>
             </div>
