@@ -174,27 +174,27 @@ export function MobileBottomNav() {
                         </span>
                     </Link>
 
-                    {/* 4. Rekap & Laporan */}
+                    {/* 4. Absen Khusus */}
                     <Link
-                        href="/reports"
+                        href="/attendances/adjustments"
                         prefetch
                         className={`flex flex-col items-center justify-center py-1 transition-all active:scale-90 ${
-                            isReportsActive
+                            isAdjustmentsActive
                                 ? 'text-[#FF6B35]'
                                 : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
                         }`}
                     >
                         <div
                             className={`flex size-10 items-center justify-center rounded-2xl transition-all ${
-                                isReportsActive
+                                isAdjustmentsActive
                                     ? 'bg-gradient-to-tr from-[#FF6B35] to-[#FF8C5A] text-white shadow-md shadow-[#FF6B35]/30'
                                     : 'hover:bg-gray-100 dark:hover:bg-white/5'
                             }`}
                         >
-                            <FileSpreadsheet className="size-5" />
+                            <CalendarDays className="size-5" />
                         </div>
-                        <span className={`text-[10px] mt-1 font-extrabold tracking-tight ${isReportsActive ? 'text-[#FF6B35]' : ''}`}>
-                            Laporan
+                        <span className={`text-[10px] mt-1 font-extrabold tracking-tight ${isAdjustmentsActive ? 'text-[#FF6B35]' : ''}`}>
+                            Absen Khusus
                         </span>
                     </Link>
 
@@ -303,20 +303,20 @@ export function MobileBottomNav() {
 
                             <div className="grid grid-cols-2 gap-2">
                                 <Link
-                                    href="/attendances/adjustments"
+                                    href="/reports"
                                     onClick={() => setIsMenuOpen(false)}
                                     className={`flex items-center gap-3 p-3 rounded-2xl border transition-all ${
-                                        url.startsWith('/attendances/adjustments')
+                                        url.startsWith('/reports')
                                             ? 'bg-orange-50 border-orange-300 text-[#FF6B35] font-bold dark:bg-orange-950/40 dark:border-orange-800'
                                             : 'border-gray-200/80 hover:bg-gray-50 text-gray-700 dark:border-gray-800 dark:text-gray-300 dark:hover:bg-gray-800/50'
                                     }`}
                                 >
-                                    <div className="flex size-9 items-center justify-center rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
-                                        <CalendarDays className="size-4.5" />
+                                    <div className="flex size-9 items-center justify-center rounded-xl bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300">
+                                        <FileSpreadsheet className="size-4.5" />
                                     </div>
                                     <div className="text-xs font-bold leading-tight">
-                                        Absen Khusus
-                                        <div className="text-[10px] font-medium text-gray-400">Izin & Sakit</div>
+                                        Rekap & Laporan
+                                        <div className="text-[10px] font-medium text-gray-400">Unduh & Cetak</div>
                                     </div>
                                 </Link>
 
