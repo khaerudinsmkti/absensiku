@@ -22,15 +22,16 @@ class AttendanceController extends Controller
         $today = Carbon::today()->toDateString();
         $date = $request->input('date', $today);
         $user = $request->user();
+        $isDutyToday = $user->isDutyTeacherToday();
 
         $classroomsQuery = Classroom::with('homeroomTeacher')->orderBy('name');
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $isDutyToday) {
             $classroomsQuery->where('homeroom_teacher_id', $user->id);
         }
         $classrooms = $classroomsQuery->get();
 
         $selectedClassroomId = $request->input('classroom_id');
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $isDutyToday) {
             if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
                 $selectedClassroomId = $classrooms->first()?->id;
             }
@@ -119,7 +120,7 @@ class AttendanceController extends Controller
             return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Presensi tidak dapat diinput.");
         }
 
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             $ownsClass = Classroom::where('id', $validated['classroom_id'])
                 ->where('homeroom_teacher_id', $request->user()->id)
                 ->exists();
@@ -171,7 +172,7 @@ class AttendanceController extends Controller
             return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Presensi tidak dapat diinput.");
         }
 
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             if ($student->classroom->homeroom_teacher_id !== $request->user()->id) {
                 abort(403, 'Anda hanya dapat memperbarui presensi siswa di kelas yang Anda ajar.');
             }

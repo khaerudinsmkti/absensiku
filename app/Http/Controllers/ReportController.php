@@ -39,13 +39,13 @@ class ReportController extends Controller
     {
         $user = $request->user();
         $classroomsQuery = Classroom::with('homeroomTeacher')->orderBy('name');
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $classroomsQuery->where('homeroom_teacher_id', $user->id);
         }
         $classrooms = $classroomsQuery->get();
 
         $selectedClassroomId = $request->input('classroom_id');
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
                 $selectedClassroomId = $classrooms->first()?->id;
             }

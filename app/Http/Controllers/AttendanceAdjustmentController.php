@@ -28,7 +28,7 @@ class AttendanceAdjustmentController extends Controller
         ->with(['attendance.student.classroom', 'approvedBy'])
         ->latest();
 
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $adjustmentsQuery->whereHas('attendance.student.classroom', function ($q) use ($user) {
                 $q->where('homeroom_teacher_id', $user->id);
             });
@@ -58,7 +58,7 @@ class AttendanceAdjustmentController extends Controller
             ->where('status', 'present')
             ->with('student.classroom');
 
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $eligibleStudentsQuery->whereHas('student.classroom', function ($q) use ($user) {
                 $q->where('homeroom_teacher_id', $user->id);
             });
@@ -78,7 +78,7 @@ class AttendanceAdjustmentController extends Controller
 
         // Classrooms list for filter
         $classroomsQuery = Classroom::orderBy('name');
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $classroomsQuery->where('homeroom_teacher_id', $user->id);
         }
         $classrooms = $classroomsQuery->get(['id', 'name']);
@@ -126,7 +126,7 @@ class AttendanceAdjustmentController extends Controller
             return back()->with('error', "Tanggal {$attendanceDate} adalah hari libur ({$offDay->name}). Absen khusus tidak dapat diinput.");
         }
 
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             $isAuthorized = Attendance::where('id', $validated['attendance_id'])
                 ->whereHas('student.classroom', function ($q) use ($request) {
                     $q->where('homeroom_teacher_id', $request->user()->id);

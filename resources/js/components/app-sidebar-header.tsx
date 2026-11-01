@@ -1,12 +1,16 @@
 import { Breadcrumbs } from '@/components/breadcrumbs';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import type { BreadcrumbItem as BreadcrumbItemType } from '@/types';
+import { usePage } from '@inertiajs/react';
 
 export function AppSidebarHeader({
     breadcrumbs = [],
 }: {
     breadcrumbs?: BreadcrumbItemType[];
 }) {
+    const { auth } = usePage<{ auth: { user: { role?: string; is_duty_teacher_today?: boolean } } }>().props;
+    const isTeacherDuty = auth?.user?.role === 'teacher' && auth?.user?.is_duty_teacher_today;
+
     return (
         <header className="sticky top-0 z-20 flex h-[68px] shrink-0 items-center justify-between border-b border-[#E8E8E8] bg-white/80 px-6 backdrop-blur-md transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-14 md:px-6 dark:border-[#2D234A] dark:bg-[#18122B]/80">
             <div className="flex items-center gap-3">
@@ -14,7 +18,13 @@ export function AppSidebarHeader({
                 <Breadcrumbs breadcrumbs={breadcrumbs} />
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
+                {isTeacherDuty && (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 border border-orange-200 px-3 py-1 text-xs font-bold text-[#FF6B35] shadow-xs dark:bg-orange-950/40 dark:border-orange-800 dark:text-orange-300">
+                        <span className="size-2 rounded-full bg-[#FF6B35] animate-pulse" />
+                        <span>Piket Hari Ini <span className="hidden md:inline">(Akses Semua Kelas)</span></span>
+                    </div>
+                )}
                 <div className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-[#E8FAF9] px-3 py-1 text-xs font-bold text-[#0D9488] dark:bg-[#113835] dark:text-[#5EEAD4]">
                     <span className="size-2 rounded-full bg-[#10B981] animate-pulse" />
                     Tahun Ajaran 2026/2027

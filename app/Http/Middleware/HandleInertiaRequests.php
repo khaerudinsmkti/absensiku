@@ -36,15 +36,7 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
-        $isDutyToday = false;
-
-        if ($user) {
-            $dayOfWeek = now()->dayOfWeekIso; // 1 = Senin, ..., 7 = Minggu
-            $isDutyToday = $user->role === 'admin' || \App\Models\DutySchedule::where('teacher_id', $user->id)
-                ->where('day_of_week', $dayOfWeek)
-                ->where('is_active', true)
-                ->exists();
-        }
+        $isDutyToday = $user ? $user->isDutyTeacherToday() : false;
 
         return [
             ...parent::share($request),

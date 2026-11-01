@@ -30,7 +30,7 @@ class LatenessController extends Controller
             ->with(['student.classroom', 'recordedBy'])
             ->orderByDesc('late_minutes');
 
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $lateRecordsQuery->whereHas('student.classroom', function ($q) use ($user) {
                 $q->where('homeroom_teacher_id', $user->id);
             });
@@ -68,7 +68,7 @@ class LatenessController extends Controller
             ->with('classroom')
             ->orderBy('name');
 
-        if ($user->role === 'teacher') {
+        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
             $studentsQuery->whereHas('classroom', function ($q) use ($user) {
                 $q->where('homeroom_teacher_id', $user->id);
             });
@@ -126,7 +126,7 @@ class LatenessController extends Controller
             return back()->with('error', "Tanggal {$validated['date']} adalah hari libur ({$offDay->name}). Keterlambatan tidak dapat diinput.");
         }
 
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             $isAuthorizedStudent = Student::where('id', $validated['student_id'])
                 ->whereHas('classroom', function ($q) use ($request) {
                     $q->where('homeroom_teacher_id', $request->user()->id);
@@ -176,7 +176,7 @@ class LatenessController extends Controller
 
     public function update(Request $request, Attendance $attendance): RedirectResponse
     {
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             $isAuthorized = $attendance->student && $attendance->student->classroom &&
                 $attendance->student->classroom->homeroom_teacher_id === $request->user()->id;
             if (! $isAuthorized) {
@@ -233,7 +233,7 @@ class LatenessController extends Controller
 
     public function destroy(Request $request, Attendance $attendance): RedirectResponse
     {
-        if ($request->user()->role === 'teacher') {
+        if ($request->user()->role === 'teacher' && ! $request->user()->isDutyTeacherToday()) {
             $isAuthorized = $attendance->student && $attendance->student->classroom &&
                 $attendance->student->classroom->homeroom_teacher_id === $request->user()->id;
             if (! $isAuthorized) {

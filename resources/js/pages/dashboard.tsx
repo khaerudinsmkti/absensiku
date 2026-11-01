@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Head } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import {
     Activity,
     AlertCircle,
@@ -86,6 +86,12 @@ export default function Dashboard({
     recap,
     top_students,
 }: DashboardProps) {
+    const { props } = usePage();
+    const user = props.auth?.user as { name?: string } | undefined;
+    const greetingTitle = user?.name
+        ? `Selamat Datang Bapak/Ibu ${user.name}`
+        : 'Selamat Datang Bapak/Ibu';
+
     const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
     const isFuture = isFutureDate || selectedDate > todayStr;
 
@@ -219,7 +225,7 @@ export default function Dashboard({
                 {/* 1. Page Banner */}
                 <PageBanner
                     badgeText={`Hari Ini • ${selectedDate}`}
-                    title="Halo, Selamat Datang di AbsensiKu! 👋"
+                    title={greetingTitle}
                     description="Sistem presensi siswa terpadu dengan pencatatan kehadiran realtime, keterlambatan otomatis, dan verifikasi izin pulang awal."
                     action={
                         <div className="flex flex-wrap gap-2.5">
