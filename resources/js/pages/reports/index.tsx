@@ -209,15 +209,6 @@ export default function ReportsPage({
                             </Button>
 
                             {/* Print Button */}
-                            <Button
-                                type="button"
-                                variant="secondary"
-                                onClick={() => window.print()}
-                                className="bg-white text-gray-700 hover:bg-gray-100 shadow-sm font-bold border border-gray-200 text-xs gap-1.5 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700"
-                            >
-                                <Printer className="size-4" />
-                                Cetak
-                            </Button>
                         </div>
                     }
                 />

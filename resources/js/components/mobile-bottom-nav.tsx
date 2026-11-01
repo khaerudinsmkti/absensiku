@@ -86,9 +86,9 @@ export function MobileBottomNav() {
     const isDashboardActive = url === '/dashboard';
     const isPresensiActive = url.startsWith('/attendances') && !url.includes('/lateness') && !url.includes('/adjustments');
     const isLatenessActive = url.startsWith('/attendances/lateness');
-    const isReportsActive = url.startsWith('/reports');
+    const isAdjustmentsActive = url.startsWith('/attendances/adjustments');
     const isOtherActive =
-        url.startsWith('/attendances/adjustments') ||
+        url.startsWith('/reports') ||
         url.startsWith('/master') ||
         url.startsWith('/admin') ||
         url.startsWith('/settings');
