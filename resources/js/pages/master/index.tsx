@@ -1,4 +1,4 @@
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertCircle,
     Award,
@@ -171,6 +171,10 @@ export default function MasterIndexPage({
     teachers = [],
     dutySchedules = [],
 }: MasterPageProps) {
+    const { props } = usePage();
+    const currentUser = props.auth?.user as { role?: string } | undefined;
+    const isPrincipal = currentUser?.role === 'principal';
+
     const [activeTab, setActiveTab] = useState<'students' | 'promotions' | 'alumni' | 'teachers' | 'classrooms' | 'duty'>(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
@@ -4093,7 +4097,7 @@ export default function MasterIndexPage({
                                         >
                                             <option value="teacher">Guru Pengajar</option>
                                             <option value="principal">Kepala Sekolah</option>
-                                            <option value="admin">Administrator</option>
+                                            {!isPrincipal && <option value="admin">Administrator</option>}
                                         </select>
                                     </div>
                                 </div>

@@ -25,7 +25,7 @@ import type { NavItem } from '@/types';
 export function AppSidebar() {
     const { url, props } = usePage();
     const user = props.auth?.user as { role?: string } | undefined;
-    const isAdmin = user?.role === 'admin';
+    const canManageSchool = user?.role === 'admin' || user?.role === 'principal';
 
     const mainNavItems: NavItem[] = [
         {
@@ -58,7 +58,7 @@ export function AppSidebar() {
             icon: FileSpreadsheet,
             isActive: url.startsWith('/reports'),
         },
-        ...(isAdmin
+        ...(canManageSchool
             ? [
                   {
                       title: 'Data Siswa & Kelas',

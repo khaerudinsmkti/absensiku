@@ -15,15 +15,12 @@ Route::get('/', [WelcomeController::class, 'index'])->name('home');
 Route::redirect('/register', '/login');
 
 Route::get('/manifest.json', function () {
-    $manifestPath = public_path('manifest.json');
-    if (! file_exists($manifestPath)) {
-        \App\Services\PwaManifestService::syncManifest();
-    }
+    $manifestData = \App\Services\PwaManifestService::getManifestData();
 
-    return response()->file($manifestPath, [
+    return response()->json($manifestData, 200, [
         'Content-Type' => 'application/manifest+json; charset=UTF-8',
-        'Cache-Control' => 'no-cache, private',
-    ]);
+        'Cache-Control' => 'no-cache, no-store, must-revalidate',
+    ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
 })->name('pwa.manifest');
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -50,8 +47,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/reports/export', [ReportController::class, 'export'])->name('reports.export');
     Route::get('/reports/export-pdf', [ReportController::class, 'exportPdf'])->name('reports.export-pdf');
 
-    // 6. Master Data (Kelas, Siswa, Guru, Jadwal Piket) - Khusus Admin
-    Route::middleware('role:admin')->group(function () {
+    // 6. Master Data (Kelas, Siswa, Guru, Jadwal Piket) - Admin & Kepala Sekolah
+    Route::middleware('role:admin,principal')->group(function () {
         Route::get('/master', [MasterDataController::class, 'index'])->name('master.index');
         // Kelas CRUD & Batch Import
         Route::post('/master/classrooms', [MasterDataController::class, 'storeClassroom'])->name('master.classrooms.store');

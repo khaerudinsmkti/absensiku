@@ -26,6 +26,8 @@ export function MobileBottomNav() {
     const user = props.auth?.user as { name?: string; role?: string } | undefined;
     const school = props.school as SchoolSettingProp | undefined;
     const isAdmin = user?.role === 'admin';
+    const isPrincipal = user?.role === 'principal';
+    const canManageSchool = isAdmin || isPrincipal;
 
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -281,7 +283,7 @@ export function MobileBottomNav() {
                                         <Download className="size-5 text-white" />
                                     </div>
                                     <div>
-                                        <h5 className="text-xs font-black">Install Aplikasi AbsensiKu</h5>
+                                        <h5 className="text-xs font-black">Install Aplikasi {school?.name || 'AbsensiKu'}</h5>
                                         <p className="text-[10px] text-white/90">Akses cepat seperti aplikasi di ponsel Anda</p>
                                     </div>
                                 </div>
@@ -339,8 +341,8 @@ export function MobileBottomNav() {
                                 </Link>
                             </div>
 
-                            {/* Administrator Menu */}
-                            {isAdmin && (
+                            {/* Administrator & Principal Menu */}
+                            {canManageSchool && (
                                 <>
                                     <div className="text-[11px] font-bold uppercase tracking-wider text-gray-400 pt-2">
                                         Administrasi Sistem

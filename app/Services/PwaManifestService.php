@@ -7,32 +7,15 @@ use App\Models\SchoolSetting;
 class PwaManifestService
 {
     /**
-     * Regenerate PWA icons and update manifest.json file
+     * Get dynamic PWA manifest data based on school settings
      */
-    public static function syncManifest(): void
+    public static function getManifestData(): array
     {
         $school = SchoolSetting::getSetting();
         $name = $school->name ?: 'AbsensiKu';
-        $shortName = 'AbsensiKu';
+        $shortName = $school->name ?: 'AbsensiKu';
 
-        $iconsDir = public_path('icons');
-        if (! is_dir($iconsDir)) {
-            mkdir($iconsDir, 0755, true);
-        }
-
-        $sourceLogoPath = null;
-        if ($school->logo_path && file_exists(storage_path('app/public/' . $school->logo_path))) {
-            $sourceLogoPath = storage_path('app/public/' . $school->logo_path);
-        }
-
-        // Generate icons if GD is available
-        if (extension_loaded('gd')) {
-            static::generateIcon($iconsDir . '/icon-192x192.png', 192, $sourceLogoPath, false);
-            static::generateIcon($iconsDir . '/icon-512x512.png', 512, $sourceLogoPath, false);
-            static::generateIcon($iconsDir . '/icon-maskable-512x512.png', 512, $sourceLogoPath, true);
-        }
-
-        $manifestData = [
+        return [
             'id' => '/?source=pwa',
             'name' => $name,
             'short_name' => $shortName,
@@ -65,6 +48,33 @@ class PwaManifestService
                 ],
             ],
         ];
+    }
+
+    /**
+     * Regenerate PWA icons and update manifest.json file
+     */
+    public static function syncManifest(): void
+    {
+        $school = SchoolSetting::getSetting();
+
+        $iconsDir = public_path('icons');
+        if (! is_dir($iconsDir)) {
+            mkdir($iconsDir, 0755, true);
+        }
+
+        $sourceLogoPath = null;
+        if ($school->logo_path && file_exists(storage_path('app/public/' . $school->logo_path))) {
+            $sourceLogoPath = storage_path('app/public/' . $school->logo_path);
+        }
+
+        // Generate icons if GD is available
+        if (extension_loaded('gd')) {
+            static::generateIcon($iconsDir . '/icon-192x192.png', 192, $sourceLogoPath, false);
+            static::generateIcon($iconsDir . '/icon-512x512.png', 512, $sourceLogoPath, false);
+            static::generateIcon($iconsDir . '/icon-maskable-512x512.png', 512, $sourceLogoPath, true);
+        }
+
+        $manifestData = static::getManifestData();
 
         file_put_contents(
             public_path('manifest.json'),

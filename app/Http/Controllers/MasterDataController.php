@@ -85,7 +85,9 @@ class MasterDataController extends Controller
             'with_next_school' => Student::where(fn ($q) => $q->where('is_alumni', true)->orWhere('is_active', false))->whereNotNull('next_school')->where('next_school', '!=', '')->count(),
         ];
 
-        $teachers = User::whereIn('role', ['teacher', 'admin', 'principal'])
+        $teacherRoles = $request->user()->isPrincipal() ? ['teacher', 'principal'] : ['teacher', 'admin', 'principal'];
+
+        $teachers = User::whereIn('role', $teacherRoles)
             ->with(['homeroomClassrooms', 'dutySchedules'])
             ->orderBy('name')
             ->get()
@@ -359,6 +361,10 @@ class MasterDataController extends Controller
      */
     public function storeTeacher(Request $request): RedirectResponse
     {
+        if ($request->user()->isPrincipal() && $request->input('role') === 'admin') {
+            return back()->with('error', 'Kepala Sekolah tidak memiliki wewenang untuk membuat akun administrator.');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:150',
             'nip' => 'nullable|string|max:50|unique:users,nip',
@@ -390,6 +396,14 @@ class MasterDataController extends Controller
      */
     public function updateTeacher(Request $request, User $user): RedirectResponse
     {
+        if ($user->isAdmin() && $request->user()->isPrincipal()) {
+            abort(403, 'Kepala Sekolah tidak berwenang mengubah akun administrator.');
+        }
+
+        if ($request->user()->isPrincipal() && $request->input('role') === 'admin') {
+            return back()->with('error', 'Kepala Sekolah tidak berwenang menetapkan peran administrator.');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:150',
             'nip' => 'nullable|string|max:50|unique:users,nip,' . $user->id,
@@ -425,6 +439,10 @@ class MasterDataController extends Controller
      */
     public function destroyTeacher(Request $request, User $user): RedirectResponse
     {
+        if ($user->isAdmin() && $request->user()->isPrincipal()) {
+            abort(403, 'Kepala Sekolah tidak berwenang menghapus akun administrator.');
+        }
+
         if ($user->id === $request->user()->id) {
             return back()->with('error', 'Anda tidak dapat menghapus akun Anda sendiri.');
         }
@@ -452,7 +470,9 @@ class MasterDataController extends Controller
 
         $count = 0;
 
-        DB::transaction(function () use ($validated, &$count) {
+        DB::transaction(function () use ($request, $validated, &$count) {
+            $isPrincipal = $request->user()->isPrincipal();
+
             foreach ($validated['teachers'] as $item) {
                 $name = trim($item['name']);
                 if (empty($name)) {
@@ -490,6 +510,10 @@ class MasterDataController extends Controller
                     default => 'teacher',
                 };
 
+                if ($isPrincipal && $role === 'admin') {
+                    $role = 'teacher';
+                }
+
                 $password = ! empty($item['password']) ? trim($item['password']) : '123456';
 
                 // Look up existing user by NIP or username or email
@@ -505,6 +529,10 @@ class MasterDataController extends Controller
                 }
 
                 if ($user) {
+                    if ($isPrincipal && $user->isAdmin()) {
+                        continue;
+                    }
+
                     // Update existing user
                     $updatePayload = [
                         'name' => $name,
