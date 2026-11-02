@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import AppLogoIcon from '@/components/app-logo-icon';
 import { Button } from '@/components/ui/button';
+import { PwaInstallPrompt } from '@/components/pwa-install-prompt';
 import { dashboard, login } from '@/routes';
 
 interface SchoolProp {
@@ -529,6 +530,8 @@ export default function Welcome({ calendar }: WelcomeProps) {
                         </div>
                     </div>
                 </footer>
+
+                <PwaInstallPrompt />
             </div>
         </>
     );
