@@ -254,11 +254,62 @@ class DashboardController extends Controller
         $isFutureDate = $date > $today;
         $holiday = \App\Models\AcademicHoliday::getOffDay($date);
 
+        // Check if user has authority to monitor unmarked classes (Admin, Principal/Kepsek, or Duty Teacher today)
+        $canViewUnmarkedClasses = $user->isAdmin() || $user->isPrincipal() || $user->isDutyTeacherToday($date);
+        $unmarkedClassrooms = [];
+        $totalClassroomsCount = 0;
+
+        if ($canViewUnmarkedClasses) {
+            $allClassrooms = Classroom::with('homeroomTeacher')
+                ->withCount(['students' => function ($q) {
+                    $q->where('is_active', true)->where('is_alumni', false);
+                }])
+                ->orderBy('name')
+                ->get();
+
+            $totalClassroomsCount = $allClassrooms->where('students_count', '>', 0)->count();
+
+            // Count attended students per classroom on date $date
+            $attendanceCounts = Attendance::where('date', $date)
+                ->whereHas('student', fn ($q) => $q->where('is_active', true)->where('is_alumni', false))
+                ->join('students', 'attendances.student_id', '=', 'students.id')
+                ->selectRaw('students.classroom_id, COUNT(DISTINCT attendances.student_id) as attended_count')
+                ->groupBy('students.classroom_id')
+                ->pluck('attended_count', 'classroom_id');
+
+            foreach ($allClassrooms as $cls) {
+                $totalActive = (int) $cls->students_count;
+                if ($totalActive === 0) {
+                    continue;
+                }
+                $attended = (int) ($attendanceCounts[$cls->id] ?? 0);
+
+                if ($attended < $totalActive) {
+                    $unmarkedClassrooms[] = [
+                        'id' => $cls->id,
+                        'name' => $cls->name,
+                        'academic_year' => $cls->academic_year,
+                        'homeroom_teacher' => $cls->homeroomTeacher ? [
+                            'id' => $cls->homeroomTeacher->id,
+                            'name' => $cls->homeroomTeacher->name,
+                            'nip' => $cls->homeroomTeacher->nip,
+                        ] : null,
+                        'total_students' => $totalActive,
+                        'attended_students' => $attended,
+                        'status' => $attended === 0 ? 'unmarked' : 'partial',
+                    ];
+                }
+            }
+        }
+
         return Inertia::render('dashboard', [
             'classrooms' => $classrooms,
             'selectedClassroomId' => (int) $selectedClassroomId,
             'selectedDate' => $date,
             'isFutureDate' => $isFutureDate,
+            'canViewUnmarkedClasses' => $canViewUnmarkedClasses,
+            'unmarkedClassrooms' => $unmarkedClassrooms,
+            'totalClassroomsCount' => $totalClassroomsCount,
             'holiday' => $holiday ? [
                 'name' => $holiday->name,
                 'type' => $holiday->type,

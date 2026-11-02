@@ -1025,9 +1025,33 @@ export default function MasterIndexPage({
     // -------------------------------------------------------------
     // TEACHER CRUD
     // -------------------------------------------------------------
+    const closeTeacherModal = () => {
+        setShowTeacherModal(false);
+        setEditingTeacher(null);
+        teacherForm.clearErrors();
+        teacherForm.reset();
+        teacherForm.setData({
+            name: '',
+            nip: '',
+            username: '',
+            email: '',
+            role: 'teacher',
+            password: '',
+        });
+    };
+
     const openCreateTeacher = () => {
         setEditingTeacher(null);
+        teacherForm.clearErrors();
         teacherForm.reset();
+        teacherForm.setData({
+            name: '',
+            nip: '',
+            username: '',
+            email: '',
+            role: 'teacher',
+            password: '',
+        });
         setShowTeacherModal(true);
     };
 
@@ -1048,11 +1072,11 @@ export default function MasterIndexPage({
         e.preventDefault();
         if (editingTeacher) {
             teacherForm.put(`/master/teachers/${editingTeacher.id}`, {
-                onSuccess: () => setShowTeacherModal(false),
+                onSuccess: () => closeTeacherModal(),
             });
         } else {
             teacherForm.post('/master/teachers', {
-                onSuccess: () => setShowTeacherModal(false),
+                onSuccess: () => closeTeacherModal(),
             });
         }
     };
@@ -4005,12 +4029,19 @@ export default function MasterIndexPage({
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
                         <div className="w-full max-w-md rounded-[22px] bg-white p-6 shadow-2xl dark:bg-[#18122B] animate-in fade-in zoom-in-95">
                             <div className="flex items-center justify-between border-b pb-3 mb-4">
-                                <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                                    {editingTeacher ? 'Edit Data Guru' : 'Tambah Guru & Pegawai Baru'}
-                                </h3>
+                                <div>
+                                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                                        {editingTeacher ? 'Edit Data Guru' : 'Tambah Guru & Pegawai Baru'}
+                                    </h3>
+                                    {!editingTeacher && (
+                                        <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">
+                                            ✓ Akun langsung aktif &amp; siap login (tanpa verifikasi email)
+                                        </p>
+                                    )}
+                                </div>
                                 <button
                                     type="button"
-                                    onClick={() => setShowTeacherModal(false)}
+                                    onClick={closeTeacherModal}
                                     className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"
                                 >
                                     <X className="size-5" />
@@ -4124,7 +4155,7 @@ export default function MasterIndexPage({
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => setShowTeacherModal(false)}
+                                        onClick={closeTeacherModal}
                                     >
                                         Batal
                                     </Button>

@@ -368,7 +368,7 @@ class MasterDataController extends Controller
             'password' => 'required|string|min:6',
         ]);
 
-        User::create([
+        $teacher = User::create([
             'name' => $validated['name'],
             'nip' => $validated['nip'] ?? null,
             'username' => $validated['username'],
@@ -377,6 +377,10 @@ class MasterDataController extends Controller
             'password' => Hash::make($validated['password']),
             'email_verified_at' => now(),
         ]);
+
+        if (! $teacher->hasVerifiedEmail()) {
+            $teacher->markEmailAsVerified();
+        }
 
         return back()->with('success', "Akun guru {$validated['name']} berhasil dibuat.");
     }
@@ -408,6 +412,10 @@ class MasterDataController extends Controller
         }
 
         $user->update($updateData);
+
+        if (! $user->hasVerifiedEmail()) {
+            $user->markEmailAsVerified();
+        }
 
         return back()->with('success', "Data guru {$user->name} berhasil diperbarui.");
     }
@@ -526,7 +534,7 @@ class MasterDataController extends Controller
                         $counter++;
                     }
 
-                    User::create([
+                    $teacher = User::create([
                         'name' => $name,
                         'nip' => $nip,
                         'username' => $username,
@@ -535,6 +543,10 @@ class MasterDataController extends Controller
                         'password' => Hash::make($password),
                         'email_verified_at' => now(),
                     ]);
+
+                    if (! $teacher->hasVerifiedEmail()) {
+                        $teacher->markEmailAsVerified();
+                    }
                 }
 
                 $count++;

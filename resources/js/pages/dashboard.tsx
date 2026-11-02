@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 import {
     Activity,
     AlertCircle,
     AlertTriangle,
+    ArrowRight,
     Award,
     Calendar,
     CalendarRange,
@@ -43,6 +44,20 @@ export interface TopStudentItem {
     minutes?: number;
 }
 
+export interface UnmarkedClassroomItem {
+    id: number;
+    name: string;
+    academic_year?: string;
+    homeroom_teacher?: {
+        id: number;
+        name: string;
+        nip?: string | null;
+    } | null;
+    total_students: number;
+    attended_students: number;
+    status: 'unmarked' | 'partial';
+}
+
 interface DashboardProps {
     classrooms?: ClassroomData[];
     selectedClassroomId?: number;
@@ -75,6 +90,9 @@ interface DashboardProps {
         };
     };
     students?: StudentAttendanceRow[];
+    canViewUnmarkedClasses?: boolean;
+    unmarkedClassrooms?: UnmarkedClassroomItem[];
+    totalClassroomsCount?: number;
 }
 
 export default function Dashboard({
@@ -85,6 +103,9 @@ export default function Dashboard({
     stats,
     recap,
     top_students,
+    canViewUnmarkedClasses = false,
+    unmarkedClassrooms = [],
+    totalClassroomsCount = 0,
 }: DashboardProps) {
     const { props } = usePage();
     const user = props.auth?.user as { name?: string } | undefined;
@@ -278,6 +299,107 @@ export default function Dashboard({
                                 Tidak dapat menginput atau memperbarui presensi untuk tanggal di masa mendatang. Silakan pilih hari ini atau sebelumnya.
                             </p>
                         </div>
+                    </div>
+                )}
+
+                {/* Unmarked Classrooms Alert/List (For Admin, Kepsek, & Guru Piket) */}
+                {canViewUnmarkedClasses && (
+                    <div className="flex flex-col gap-3">
+                        {unmarkedClassrooms && unmarkedClassrooms.length > 0 ? (
+                            <div className="rounded-2xl border-2 border-rose-300/80 bg-rose-50/50 p-5 shadow-sm dark:border-rose-900/50 dark:bg-rose-950/20">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-rose-200/80 pb-3.5 mb-4 dark:border-rose-900/40">
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-200">
+                                            <AlertCircle className="size-5" />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-base font-extrabold text-gray-900 dark:text-white">
+                                                    Kelas Belum Presensi Hari Ini
+                                                </h3>
+                                                <span className="rounded-full bg-rose-600 px-2.5 py-0.5 text-xs font-black text-white shadow-xs">
+                                                    {unmarkedClassrooms.length} Kelas
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-rose-800/90 dark:text-rose-300/90 mt-0.5">
+                                                Daftar kelas yang belum menyelesaikan input absensi siswa untuk hari ini ({selectedDate}).
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-xs font-bold text-gray-500 dark:text-gray-400 self-start sm:self-auto">
+                                        Status: <span className="text-rose-600 font-black">{unmarkedClassrooms.length}</span> dari {totalClassroomsCount} Kelas Belum Lengkap
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {unmarkedClassrooms.map((cls) => (
+                                        <div
+                                            key={cls.id}
+                                            className="flex flex-col justify-between rounded-xl border border-rose-200/90 bg-white p-3.5 shadow-xs transition-all hover:shadow-md dark:border-rose-900/40 dark:bg-[#18122B]"
+                                        >
+                                            <div className="flex items-start justify-between gap-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-black text-gray-900 dark:text-white">
+                                                            {cls.name}
+                                                        </span>
+                                                        <span
+                                                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                                                                cls.status === 'partial'
+                                                                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                                                                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'
+                                                            }`}
+                                                        >
+                                                            {cls.status === 'partial' ? 'Belum Lengkap' : 'Belum Absen'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 truncate">
+                                                        <span className="font-semibold text-gray-700 dark:text-gray-300">Wali Kelas:</span>{' '}
+                                                        {cls.homeroom_teacher?.name || 'Belum Ditentukan'}
+                                                    </div>
+                                                    <div className="text-[11px] text-gray-400 mt-0.5 font-medium">
+                                                        Tercatat: {cls.attended_students} / {cls.total_students} Siswa
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-800/80 flex items-center justify-end">
+                                                <Button
+                                                    asChild
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    className="h-8 px-3 text-xs font-bold text-[#FF6B35] bg-orange-50 hover:bg-orange-100 border border-orange-200 dark:bg-orange-950/40 dark:border-orange-800 dark:hover:bg-orange-900/50"
+                                                >
+                                                    <Link href={`/attendances?classroom_id=${cls.id}&date=${selectedDate}`}>
+                                                        Input Presensi
+                                                        <ArrowRight className="size-3.5 ml-1" />
+                                                    </Link>
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) : !holiday && totalClassroomsCount && totalClassroomsCount > 0 ? (
+                            <div className="flex items-center gap-3.5 rounded-2xl border-2 border-emerald-300/80 bg-emerald-50/60 p-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/30">
+                                <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                    <CheckCircle2 className="size-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <h4 className="text-sm font-extrabold text-emerald-950 dark:text-emerald-100">
+                                            Seluruh Kelas Sudah Melakukan Presensi! 🎉
+                                        </h4>
+                                        <span className="rounded-full bg-emerald-600 px-2.5 py-0.5 text-[11px] font-black text-white">
+                                            100% Selesai
+                                        </span>
+                                    </div>
+                                    <p className="mt-0.5 text-xs text-emerald-800/90 dark:text-emerald-300/90">
+                                        Seluruh {totalClassroomsCount} rombongan belajar telah lengkap menginput data kehadiran siswa untuk hari ini ({selectedDate}).
+                                    </p>
+                                </div>
+                            </div>
+                        ) : null}
                     </div>
                 )}
 
