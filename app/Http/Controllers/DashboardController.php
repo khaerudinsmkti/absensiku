@@ -64,6 +64,30 @@ class DashboardController extends Controller
 
         $hasNoAssignedClass = ! $isOverallAuthorized && $classrooms->isEmpty();
 
+        $user->loadMissing('homeroomClassrooms');
+        $userRoleLabel = 'Guru Pengajar';
+
+        if ($user->isAdmin()) {
+            $userRoleLabel = 'Administrator';
+        } elseif ($user->isPrincipal()) {
+            $userRoleLabel = 'Kepala Sekolah';
+        } elseif ($user->isStudent()) {
+            $userRoleLabel = 'Siswa';
+        } else {
+            $homeroomNames = $user->homeroomClassrooms->pluck('name')->join(', ');
+            $isDuty = $user->isDutyTeacherToday($date);
+
+            if ($homeroomNames && $isDuty) {
+                $userRoleLabel = 'Wali Kelas ' . $homeroomNames . ' • Guru Piket';
+            } elseif ($homeroomNames) {
+                $userRoleLabel = 'Wali Kelas ' . $homeroomNames;
+            } elseif ($isDuty) {
+                $userRoleLabel = 'Guru Piket';
+            } else {
+                $userRoleLabel = 'Guru Pengajar';
+            }
+        }
+
         $totalStudents = 0;
         if (! $hasNoAssignedClass) {
             $studentsCountQuery = Student::where('is_active', true)->where('is_alumni', false);
@@ -355,6 +379,7 @@ class DashboardController extends Controller
         }
 
         return Inertia::render('dashboard', [
+            'userRoleLabel' => $userRoleLabel,
             'classrooms' => $classrooms,
             'selectedClassroomId' => $selectedClassroomId ? (int) $selectedClassroomId : null,
             'isOverallAuthorized' => $isOverallAuthorized,

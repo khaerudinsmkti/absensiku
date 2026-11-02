@@ -10,9 +10,9 @@ import {
     CalendarRange,
     CheckCircle2,
     Clock,
-    Download,
     FileText,
     School,
+    ShieldCheck,
     UserX,
 } from 'lucide-react';
 import { PageBanner } from '@/components/page-banner';
@@ -96,6 +96,7 @@ interface DashboardProps {
     canViewUnmarkedClasses?: boolean;
     unmarkedClassrooms?: UnmarkedClassroomItem[];
     totalClassroomsCount?: number;
+    userRoleLabel?: string;
 }
 
 export default function Dashboard({
@@ -112,9 +113,11 @@ export default function Dashboard({
     canViewUnmarkedClasses = false,
     unmarkedClassrooms = [],
     totalClassroomsCount = 0,
+    userRoleLabel = '',
 }: DashboardProps) {
     const { props } = usePage();
-    const user = props.auth?.user as { name?: string } | undefined;
+    const user = props.auth?.user as { name?: string; role?: string } | undefined;
+    const school = props.school as { name?: string } | undefined;
     const greetingTitle = user?.name
         ? `Selamat Datang Bapak/Ibu ${user.name}`
         : 'Selamat Datang Bapak/Ibu';
@@ -258,13 +261,9 @@ export default function Dashboard({
         );
     };
 
-    const exportUrl = selectedClassroomId
-        ? `/reports/export?classroom_id=${selectedClassroomId}&start_date=${selectedDate}&end_date=${selectedDate}`
-        : `/reports/export?start_date=${selectedDate}&end_date=${selectedDate}`;
-
     return (
         <>
-            <Head title="Dashboard - AbsensiKu" />
+            <Head title={`Dashboard - ${school?.name || 'AbsensiKu'}`} />
             <div className="flex flex-1 flex-col gap-6 p-6 sm:p-8 bg-page-gradient min-h-screen">
                 {/* 1. Page Banner */}
                 <PageBanner
@@ -286,16 +285,20 @@ export default function Dashboard({
                                 </div>
                             </div>
 
-                            <Button
-                                asChild
-                                variant="secondary"
-                                className="bg-white text-[#FF6B35] hover:bg-[#FFFBE6] shadow-sm font-bold border-none h-11"
-                            >
-                                <a href={exportUrl}>
-                                    <Download className="size-4 mr-1.5" />
-                                    Export Rekap Excel
-                                </a>
-                            </Button>
+                            {/* Peran Akun Widget */}
+                            <div className="flex items-center gap-2.5 rounded-xl bg-white/20 px-3.5 py-2 text-white backdrop-blur-md border border-white/25 shadow-xs">
+                                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/25 text-[#FFE66D] shadow-xs">
+                                    <ShieldCheck className="size-4.5" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider leading-none">
+                                        Peran Akun
+                                    </span>
+                                    <span className="text-xs sm:text-sm font-black tracking-wide leading-tight text-white mt-0.5">
+                                        {userRoleLabel || (user?.role === 'admin' ? 'Administrator' : user?.role === 'principal' ? 'Kepala Sekolah' : 'Guru Pengajar')}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     }
                 />
