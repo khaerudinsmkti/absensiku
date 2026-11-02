@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     Activity,
     AlertCircle,
@@ -12,6 +12,7 @@ import {
     Clock,
     Download,
     FileText,
+    School,
     UserX,
 } from 'lucide-react';
 import { PageBanner } from '@/components/page-banner';
@@ -60,7 +61,9 @@ export interface UnmarkedClassroomItem {
 
 interface DashboardProps {
     classrooms?: ClassroomData[];
-    selectedClassroomId?: number;
+    selectedClassroomId?: number | null;
+    isOverallAuthorized?: boolean;
+    hasNoAssignedClass?: boolean;
     selectedDate: string;
     isFutureDate?: boolean;
     holiday?: {
@@ -96,7 +99,10 @@ interface DashboardProps {
 }
 
 export default function Dashboard({
-    selectedClassroomId,
+    classrooms = [],
+    selectedClassroomId = null,
+    isOverallAuthorized = false,
+    hasNoAssignedClass = false,
     selectedDate,
     isFutureDate = false,
     holiday,
@@ -115,6 +121,23 @@ export default function Dashboard({
 
     const todayStr = useMemo(() => new Date().toLocaleDateString('en-CA'), []);
     const isFuture = isFutureDate || selectedDate > todayStr;
+
+    // Live Clock Widget (Jam, Menit, Detik - 24 Jam)
+    const [currentTime, setCurrentTime] = useState<string>(() => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    });
+
+    useEffect(() => {
+        const updateClock = () => {
+            const d = new Date();
+            const pad = (n: number) => String(n).padStart(2, '0');
+            setCurrentTime(`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`);
+        };
+        const timer = setInterval(updateClock, 1000);
+        return () => clearInterval(timer);
+    }, []);
 
     const [topPeriod, setTopPeriod] = useState<'yearly' | 'monthly'>('yearly');
 
@@ -249,11 +272,24 @@ export default function Dashboard({
                     title={greetingTitle}
                     description="Sistem presensi siswa terpadu dengan pencatatan kehadiran realtime, keterlambatan otomatis, dan verifikasi izin pulang awal."
                     action={
-                        <div className="flex flex-wrap gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            {/* Live Clock Widget (Jam:Menit:Detik WIB) */}
+                            <div className="flex items-center gap-2 rounded-xl bg-white/20 px-3.5 py-2 text-white backdrop-blur-md border border-white/25 shadow-xs">
+                                <Clock className="size-4.5 text-[#FFE66D] animate-pulse" />
+                                <div className="flex flex-col">
+                                    <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider leading-none">
+                                        Waktu Saat Ini
+                                    </span>
+                                    <span className="font-mono text-base font-black tracking-wider leading-tight text-white mt-0.5">
+                                        {currentTime} <span className="text-xs font-bold text-[#FFE66D]">WIB</span>
+                                    </span>
+                                </div>
+                            </div>
+
                             <Button
                                 asChild
                                 variant="secondary"
-                                className="bg-white text-[#FF6B35] hover:bg-[#FFFBE6] shadow-sm font-bold border-none"
+                                className="bg-white text-[#FF6B35] hover:bg-[#FFFBE6] shadow-sm font-bold border-none h-11"
                             >
                                 <a href={exportUrl}>
                                     <Download className="size-4 mr-1.5" />
@@ -263,6 +299,90 @@ export default function Dashboard({
                         </div>
                     }
                 />
+
+                {/* Scope Filter Bar (Seluruh Kelas vs Kelas Spesifik) */}
+                {hasNoAssignedClass ? (
+                    <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900 shadow-xs dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-200">
+                        <AlertTriangle className="size-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                        <div className="text-xs">
+                            <span className="font-bold">Perhatian:</span> Anda saat ini belum ditugaskan sebagai wali kelas pada rombel aktif manapun. Silakan hubungi Administrator sekolah untuk penetapan rombel.
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-gray-200/80 bg-white/80 p-3.5 backdrop-blur-md dark:border-gray-800 dark:bg-[#18122B]/80 shadow-xs">
+                        <div className="flex items-center gap-2.5">
+                            <div className="flex size-9 items-center justify-center rounded-xl bg-orange-100 text-[#FF6B35] dark:bg-orange-950/60 dark:text-orange-300">
+                                <School className="size-4.5" />
+                            </div>
+                            <div>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                    Cakupan Data Dashboard
+                                </span>
+                                <div className="text-xs font-black text-gray-900 dark:text-white">
+                                    {isOverallAuthorized && !selectedClassroomId ? (
+                                        <span className="text-[#FF6B35]">🏫 Seluruh Rombongan Belajar ({classrooms.length} Kelas Terdaftar)</span>
+                                    ) : (
+                                        <span>Kelas: {classrooms.find((c) => c.id === selectedClassroomId)?.name || 'Semua Kelas'}</span>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            {isOverallAuthorized && classrooms.length > 0 && (
+                                <select
+                                    value={selectedClassroomId || ''}
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        router.get(
+                                            '/dashboard',
+                                            {
+                                                ...(val ? { classroom_id: val } : {}),
+                                                ...(selectedDate !== todayStr ? { date: selectedDate } : {}),
+                                            },
+                                            { preserveState: true }
+                                        );
+                                    }}
+                                    className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-xs focus:border-[#FF6B35] focus:outline-hidden dark:border-gray-800 dark:bg-[#20183A] dark:text-gray-200"
+                                >
+                                    <option value="">🏫 Semua Kelas (Keseluruhan Sekolah)</option>
+                                    {classrooms.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} {c.homeroom_teacher ? `(${c.homeroom_teacher.name})` : ''}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {!isOverallAuthorized && classrooms.length > 1 && (
+                                <select
+                                    value={selectedClassroomId || ''}
+                                    onChange={(e) => {
+                                        router.get(
+                                            '/dashboard',
+                                            {
+                                                classroom_id: e.target.value,
+                                                ...(selectedDate !== todayStr ? { date: selectedDate } : {}),
+                                            },
+                                            { preserveState: true }
+                                        );
+                                    }}
+                                    className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 shadow-xs focus:border-[#FF6B35] focus:outline-hidden dark:border-gray-800 dark:bg-[#20183A] dark:text-gray-200"
+                                >
+                                    {classrooms.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            {!isOverallAuthorized && classrooms.length === 1 && (
+                                <div className="inline-flex items-center gap-1.5 rounded-xl bg-orange-50 px-3 py-1.5 text-xs font-bold text-[#FF6B35] border border-orange-200 dark:bg-orange-950/40 dark:border-orange-800">
+                                    <span>Wali Kelas: <b>{classrooms[0].name}</b></span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* Holiday Banner if today / selected date is a holiday */}
                 {holiday && (

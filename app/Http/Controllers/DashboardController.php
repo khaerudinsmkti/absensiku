@@ -36,34 +36,56 @@ class DashboardController extends Controller
         $yearEnd = $carbonDate->copy()->endOfYear()->toDateString();
         $yearlyLabel = 'Tahun ' . $carbonDate->year;
 
-        // If teacher, only load the classroom(s) they teach (unless on duty today)
+        $isOverallAuthorized = $user->isAdmin() || $user->isPrincipal() || $user->isDutyTeacherToday($date);
+
+        // Classrooms available for this user
         $classroomsQuery = Classroom::with('homeroomTeacher')->orderBy('name');
-        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
+        if (! $isOverallAuthorized) {
+            // Regular teacher: only classes they teach
             $classroomsQuery->where('homeroom_teacher_id', $user->id);
         }
         $classrooms = $classroomsQuery->get();
 
         $selectedClassroomId = $request->input('classroom_id');
-        if ($user->role === 'teacher' && ! $user->isDutyTeacherToday()) {
+
+        if (! $isOverallAuthorized) {
+            // For regular teacher, MUST be their classroom
             if (! $selectedClassroomId || ! $classrooms->contains('id', (int) $selectedClassroomId)) {
                 $selectedClassroomId = $classrooms->first()?->id;
             }
-        } elseif (! $selectedClassroomId && $classrooms->isNotEmpty()) {
-            $selectedClassroomId = $classrooms->first()->id;
+        } else {
+            // For admin, principal, duty teacher:
+            // Default is null (Keseluruhan Kelas / seluruh sekolah)
+            // If they explicitly pass a classroom_id that exists, use it
+            if ($selectedClassroomId && ! $classrooms->contains('id', (int) $selectedClassroomId)) {
+                $selectedClassroomId = null;
+            }
         }
 
-        $totalStudents = $selectedClassroomId 
-            ? Student::where('classroom_id', $selectedClassroomId)->where('is_active', true)->count()
-            : Student::where('is_active', true)->count();
+        $hasNoAssignedClass = ! $isOverallAuthorized && $classrooms->isEmpty();
+
+        $totalStudents = 0;
+        if (! $hasNoAssignedClass) {
+            $studentsCountQuery = Student::where('is_active', true)->where('is_alumni', false);
+            if ($selectedClassroomId) {
+                $studentsCountQuery->where('classroom_id', $selectedClassroomId);
+            }
+            $totalStudents = $studentsCountQuery->count();
+        }
 
         // 1. Daily Stats
-        $attendanceQuery = Attendance::where('date', $date);
-        if ($selectedClassroomId) {
+        if ($hasNoAssignedClass) {
+            $attendances = collect();
+        } else {
+            $attendanceQuery = Attendance::where('date', $date);
             $attendanceQuery->whereHas('student', function ($q) use ($selectedClassroomId) {
-                $q->where('classroom_id', $selectedClassroomId);
+                $q->where('is_active', true)->where('is_alumni', false);
+                if ($selectedClassroomId) {
+                    $q->where('classroom_id', $selectedClassroomId);
+                }
             });
+            $attendances = $attendanceQuery->get();
         }
-        $attendances = $attendanceQuery->get();
 
         $totalHadir = $attendances->where('status', 'present')->count();
         $totalSakit = $attendances->where('status', 'sick')->count();
@@ -71,12 +93,18 @@ class DashboardController extends Controller
         $totalAlpha = $attendances->where('status', 'absent')->count();
         $totalTerlambat = $attendances->where('is_late', true)->count();
 
-        $totalAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($date, $selectedClassroomId) {
-            $q->where('date', $date);
-            if ($selectedClassroomId) {
-                $q->whereHas('student', fn ($sq) => $sq->where('classroom_id', $selectedClassroomId));
-            }
-        })->count();
+        $totalAdjustments = 0;
+        if (! $hasNoAssignedClass) {
+            $totalAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($date, $selectedClassroomId) {
+                $q->where('date', $date);
+                $q->whereHas('student', function ($sq) use ($selectedClassroomId) {
+                    $sq->where('is_active', true)->where('is_alumni', false);
+                    if ($selectedClassroomId) {
+                        $sq->where('classroom_id', $selectedClassroomId);
+                    }
+                });
+            })->count();
+        }
 
         $attendanceRate = $totalStudents > 0 
             ? round(($totalHadir / $totalStudents) * 100, 1) 
@@ -98,18 +126,35 @@ class DashboardController extends Controller
         ];
 
         // 2. Monthly Stats
-        $monthlyQuery = Attendance::whereBetween('date', [$monthStart, $monthEnd]);
-        if ($selectedClassroomId) {
-            $monthlyQuery->whereHas('student', fn ($q) => $q->where('classroom_id', $selectedClassroomId));
+        $monthlyRow = null;
+        $monthlyAdjustments = 0;
+        if (! $hasNoAssignedClass) {
+            $monthlyQuery = Attendance::whereBetween('date', [$monthStart, $monthEnd]);
+            $monthlyQuery->whereHas('student', function ($q) use ($selectedClassroomId) {
+                $q->where('is_active', true)->where('is_alumni', false);
+                if ($selectedClassroomId) {
+                    $q->where('classroom_id', $selectedClassroomId);
+                }
+            });
+            $monthlyRow = $monthlyQuery->selectRaw("
+                COUNT(*) as total_records,
+                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as total_hadir,
+                SUM(CASE WHEN status = 'sick' THEN 1 ELSE 0 END) as total_sakit,
+                SUM(CASE WHEN status = 'permit' THEN 1 ELSE 0 END) as total_izin,
+                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as total_alpha,
+                SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) as total_terlambat
+            ")->first();
+
+            $monthlyAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($monthStart, $monthEnd, $selectedClassroomId) {
+                $q->whereBetween('date', [$monthStart, $monthEnd]);
+                $q->whereHas('student', function ($sq) use ($selectedClassroomId) {
+                    $sq->where('is_active', true)->where('is_alumni', false);
+                    if ($selectedClassroomId) {
+                        $sq->where('classroom_id', $selectedClassroomId);
+                    }
+                });
+            })->count();
         }
-        $monthlyRow = $monthlyQuery->selectRaw("
-            COUNT(*) as total_records,
-            SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as total_hadir,
-            SUM(CASE WHEN status = 'sick' THEN 1 ELSE 0 END) as total_sakit,
-            SUM(CASE WHEN status = 'permit' THEN 1 ELSE 0 END) as total_izin,
-            SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as total_alpha,
-            SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) as total_terlambat
-        ")->first();
 
         $mHadir = (int) ($monthlyRow->total_hadir ?? 0);
         $mSakit = (int) ($monthlyRow->total_sakit ?? 0);
@@ -118,13 +163,6 @@ class DashboardController extends Controller
         $mTerlambat = (int) ($monthlyRow->total_terlambat ?? 0);
         $mRecords = (int) ($monthlyRow->total_records ?? 0);
         $mRate = $mRecords > 0 ? round(($mHadir / $mRecords) * 100, 1) : 0;
-
-        $monthlyAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($monthStart, $monthEnd, $selectedClassroomId) {
-            $q->whereBetween('date', [$monthStart, $monthEnd]);
-            if ($selectedClassroomId) {
-                $q->whereHas('student', fn ($sq) => $sq->where('classroom_id', $selectedClassroomId));
-            }
-        })->count();
 
         $monthlyStats = [
             'period' => 'monthly',
@@ -142,18 +180,35 @@ class DashboardController extends Controller
         ];
 
         // 3. Yearly Stats
-        $yearlyQuery = Attendance::whereBetween('date', [$yearStart, $yearEnd]);
-        if ($selectedClassroomId) {
-            $yearlyQuery->whereHas('student', fn ($q) => $q->where('classroom_id', $selectedClassroomId));
+        $yearlyRow = null;
+        $yearlyAdjustments = 0;
+        if (! $hasNoAssignedClass) {
+            $yearlyQuery = Attendance::whereBetween('date', [$yearStart, $yearEnd]);
+            $yearlyQuery->whereHas('student', function ($q) use ($selectedClassroomId) {
+                $q->where('is_active', true)->where('is_alumni', false);
+                if ($selectedClassroomId) {
+                    $q->where('classroom_id', $selectedClassroomId);
+                }
+            });
+            $yearlyRow = $yearlyQuery->selectRaw("
+                COUNT(*) as total_records,
+                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as total_hadir,
+                SUM(CASE WHEN status = 'sick' THEN 1 ELSE 0 END) as total_sakit,
+                SUM(CASE WHEN status = 'permit' THEN 1 ELSE 0 END) as total_izin,
+                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as total_alpha,
+                SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) as total_terlambat
+            ")->first();
+
+            $yearlyAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($yearStart, $yearEnd, $selectedClassroomId) {
+                $q->whereBetween('date', [$yearStart, $yearEnd]);
+                $q->whereHas('student', function ($sq) use ($selectedClassroomId) {
+                    $sq->where('is_active', true)->where('is_alumni', false);
+                    if ($selectedClassroomId) {
+                        $sq->where('classroom_id', $selectedClassroomId);
+                    }
+                });
+            })->count();
         }
-        $yearlyRow = $yearlyQuery->selectRaw("
-            COUNT(*) as total_records,
-            SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) as total_hadir,
-            SUM(CASE WHEN status = 'sick' THEN 1 ELSE 0 END) as total_sakit,
-            SUM(CASE WHEN status = 'permit' THEN 1 ELSE 0 END) as total_izin,
-            SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) as total_alpha,
-            SUM(CASE WHEN is_late = 1 THEN 1 ELSE 0 END) as total_terlambat
-        ")->first();
 
         $yHadir = (int) ($yearlyRow->total_hadir ?? 0);
         $ySakit = (int) ($yearlyRow->total_sakit ?? 0);
@@ -162,13 +217,6 @@ class DashboardController extends Controller
         $yTerlambat = (int) ($yearlyRow->total_terlambat ?? 0);
         $yRecords = (int) ($yearlyRow->total_records ?? 0);
         $yRate = $yRecords > 0 ? round(($yHadir / $yRecords) * 100, 1) : 0;
-
-        $yearlyAdjustments = AttendanceAdjustment::whereHas('attendance', function ($q) use ($yearStart, $yearEnd, $selectedClassroomId) {
-            $q->whereBetween('date', [$yearStart, $yearEnd]);
-            if ($selectedClassroomId) {
-                $q->whereHas('student', fn ($sq) => $sq->where('classroom_id', $selectedClassroomId));
-            }
-        })->count();
 
         $yearlyStats = [
             'period' => 'yearly',
@@ -186,7 +234,11 @@ class DashboardController extends Controller
         ];
 
         // 4. Top Students (Paling banyak Telat, Sakit, Izin, Alpa)
-        $getTopStudents = function (string $type, string $start, string $end) use ($selectedClassroomId) {
+        $getTopStudents = function (string $type, string $start, string $end) use ($selectedClassroomId, $hasNoAssignedClass) {
+            if ($hasNoAssignedClass) {
+                return [];
+            }
+
             $query = Attendance::whereBetween('date', [$start, $end]);
 
             if ($type === 'terlambat') {
@@ -202,7 +254,7 @@ class DashboardController extends Controller
             }
 
             $query->whereHas('student', function ($q) use ($selectedClassroomId) {
-                $q->where('is_active', true);
+                $q->where('is_active', true)->where('is_alumni', false);
                 if ($selectedClassroomId) {
                     $q->where('classroom_id', $selectedClassroomId);
                 }
@@ -304,7 +356,9 @@ class DashboardController extends Controller
 
         return Inertia::render('dashboard', [
             'classrooms' => $classrooms,
-            'selectedClassroomId' => (int) $selectedClassroomId,
+            'selectedClassroomId' => $selectedClassroomId ? (int) $selectedClassroomId : null,
+            'isOverallAuthorized' => $isOverallAuthorized,
+            'hasNoAssignedClass' => $hasNoAssignedClass,
             'selectedDate' => $date,
             'isFutureDate' => $isFutureDate,
             'canViewUnmarkedClasses' => $canViewUnmarkedClasses,
