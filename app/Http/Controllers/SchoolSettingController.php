@@ -73,6 +73,8 @@ class SchoolSettingController extends Controller
         $setting->start_time = substr($validated['start_time'], 0, 5);
         $setting->save();
 
+        \App\Services\PwaManifestService::syncManifest();
+
         return back()->with('success', 'Pengaturan profil sekolah dan jam masuk berhasil disimpan.');
     }
 }

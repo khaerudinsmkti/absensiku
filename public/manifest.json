@@ -1,33 +1,36 @@
 {
-  "name": "SD Negeri Cengkareng Barat 09 Pagi",
-  "short_name": "AbsensiKu",
-  "description": "Aplikasi Presensi Siswa dan Manajemen Sekolah Modern",
-  "start_url": "/",
-  "scope": "/",
-  "display": "standalone",
-  "orientation": "portrait-primary",
-  "background_color": "#FFFFFF",
-  "theme_color": "#FF6B35",
-  "categories": ["education", "productivity"],
-  "icons": [
-    {
-      "src": "/storage/school/35HeBwNq4jG4sxbD3MByWxxNx1jzjkfpRZeSWOvu.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/storage/school/35HeBwNq4jG4sxbD3MByWxxNx1jzjkfpRZeSWOvu.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/storage/school/35HeBwNq4jG4sxbD3MByWxxNx1jzjkfpRZeSWOvu.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
-    }
-  ]
+    "id": "/?source=pwa",
+    "name": "SD NEGERI RAWA BUAYA 07",
+    "short_name": "AbsensiKu",
+    "description": "Aplikasi Presensi Siswa dan Manajemen Sekolah - SD NEGERI RAWA BUAYA 07",
+    "start_url": "/?source=pwa",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait-primary",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF6B35",
+    "categories": [
+        "education",
+        "productivity"
+    ],
+    "icons": [
+        {
+            "src": "/icons/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/icons/icon-maskable-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
 }
-

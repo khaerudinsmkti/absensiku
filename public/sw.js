@@ -1,11 +1,14 @@
 // AbsensiKu Progressive Web App Service Worker
-const CACHE_NAME = 'absensiku-pwa-v1';
+const CACHE_NAME = 'absensiku-pwa-v2';
 
 // Essential static assets to pre-cache
 const PRECACHE_ASSETS = [
     '/',
     '/favicon.ico',
     '/manifest.json',
+    '/icons/icon-192x192.png',
+    '/icons/icon-512x512.png',
+    '/icons/icon-maskable-512x512.png',
 ];
 
 // Install event - precache core static assets

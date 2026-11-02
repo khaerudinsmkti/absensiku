@@ -19,9 +19,15 @@ export function PwaInstallPrompt() {
     const [showInstructions, setShowInstructions] = useState(false);
     const [isIOS, setIsIOS] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [isInsecureOrigin, setIsInsecureOrigin] = useState(false);
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
+
+        // Check if origin is secure for PWA
+        const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        const isSecure = window.isSecureContext || isLocalhost;
+        setIsInsecureOrigin(!isSecure);
 
         // 1. Detect if running standalone (already installed as PWA)
         const checkStandalone = () => {
@@ -157,27 +163,39 @@ export function PwaInstallPrompt() {
                 Pasang aplikasi di {isMobile ? 'ponsel' : 'komputer'} Anda untuk akses lebih cepat, ringan, dan langsung dari layar utama tanpa membuka browser.
             </p>
 
-            {/* Step-by-step guidance if beforeinstallprompt is unavailable (e.g., iOS Safari) */}
+            {/* Step-by-step guidance if beforeinstallprompt is unavailable (e.g., iOS Safari or non-localhost) */}
             {showInstructions ? (
                 <div className="mt-3 rounded-xl bg-orange-50 dark:bg-orange-950/50 p-3 text-xs border border-orange-200 dark:border-orange-800">
                     <p className="font-bold text-gray-900 dark:text-white mb-1.5 flex items-center gap-1.5">
                         <Info className="size-4 text-[#FF6B35]" />
                         Petunjuk Instalasi:
                     </p>
-                    <ol className="list-decimal list-inside space-y-1 text-gray-700 dark:text-gray-300">
-                        {isIOS ? (
-                            <>
-                                <li>Ketuk tombol <b>Bagikan (Share ⎋)</b> pada bilah bawah browser Safari.</li>
-                                <li>Pilih opsi <b>"Tambahkan ke Layar Utama" (Add to Home Screen)</b>.</li>
-                                <li>Ketuk <b>"Tambah"</b> di pojok kanan atas.</li>
-                            </>
-                        ) : (
-                            <>
-                                <li>Buka menu browser (ikon titik tiga ⋮ di pojok kanan atas).</li>
-                                <li>Pilih menu <b>"Install Aplikasi"</b> atau <b>"Tambahkan ke Layar Utama"</b>.</li>
-                            </>
-                        )}
-                    </ol>
+                    {isInsecureOrigin ? (
+                        <div className="space-y-1.5 text-gray-700 dark:text-gray-300">
+                            <p className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-100/80 dark:bg-amber-950/60 p-2 rounded-lg font-medium">
+                                ⚠️ Anda sedang mengakses via IP jaringan lokal (HTTP). Kebijakan keamanan browser Chrome/Edge hanya mengizinkan instalasi aplikasi PWA melalui <b>HTTPS</b> atau <b>http://localhost</b>.
+                            </p>
+                            <ol className="list-decimal list-inside space-y-1 mt-1 text-[11px]">
+                                <li>Buka aplikasi di perangkat utama menggunakan <b>http://localhost:8000</b> untuk langsung menginstall.</li>
+                                <li>Di ponsel, Anda tetap dapat menambahkan pintasan melalui menu browser ⋮ &gt; <b>Tambahkan ke Layar Utama (Add to Home screen)</b>.</li>
+                            </ol>
+                        </div>
+                    ) : (
+                        <ol className="list-decimal list-inside space-y-1 text-gray-700 dark:text-gray-300">
+                            {isIOS ? (
+                                <>
+                                    <li>Ketuk tombol <b>Bagikan (Share ⎋)</b> pada bilah bawah browser Safari.</li>
+                                    <li>Pilih opsi <b>"Tambahkan ke Layar Utama" (Add to Home Screen)</b>.</li>
+                                    <li>Ketuk <b>"Tambah"</b> di pojok kanan atas.</li>
+                                </>
+                            ) : (
+                                <>
+                                    <li>Buka menu browser (ikon titik tiga ⋮ di pojok kanan atas).</li>
+                                    <li>Pilih menu <b>"Install Aplikasi"</b> atau <b>"Tambahkan ke Layar Utama"</b>.</li>
+                                </>
+                            )}
+                        </ol>
+                    )}
                     <button
                         type="button"
                         onClick={() => setShowInstructions(false)}

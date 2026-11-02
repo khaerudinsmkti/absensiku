@@ -15,43 +15,12 @@ Route::get('/', [WelcomeController::class, 'index'])->name('home');
 Route::redirect('/register', '/login');
 
 Route::get('/manifest.json', function () {
-    $school = \App\Models\SchoolSetting::getSetting();
-    $name = $school->name ?: 'AbsensiKu';
-    $shortName = 'AbsensiKu';
-    $logoUrl = $school->logo_url ?: asset('favicon.ico');
+    $manifestPath = public_path('manifest.json');
+    if (! file_exists($manifestPath)) {
+        \App\Services\PwaManifestService::syncManifest();
+    }
 
-    return response()->json([
-        'name' => $name,
-        'short_name' => $shortName,
-        'description' => 'Aplikasi Presensi Siswa dan Manajemen Sekolah - ' . $name,
-        'start_url' => '/',
-        'scope' => '/',
-        'display' => 'standalone',
-        'orientation' => 'portrait-primary',
-        'background_color' => '#FFFFFF',
-        'theme_color' => '#FF6B35',
-        'categories' => ['education', 'productivity'],
-        'icons' => [
-            [
-                'src' => $logoUrl,
-                'sizes' => '192x192',
-                'type' => 'image/png',
-                'purpose' => 'any',
-            ],
-            [
-                'src' => $logoUrl,
-                'sizes' => '512x512',
-                'type' => 'image/png',
-                'purpose' => 'any',
-            ],
-            [
-                'src' => $logoUrl,
-                'sizes' => '512x512',
-                'type' => 'image/png',
-                'purpose' => 'maskable',
-            ],
-        ],
-    ], 200, [
+    return response()->file($manifestPath, [
         'Content-Type' => 'application/manifest+json; charset=UTF-8',
         'Cache-Control' => 'no-cache, private',
     ]);
